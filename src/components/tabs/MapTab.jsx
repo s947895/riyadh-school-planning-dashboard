@@ -1,242 +1,326 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Circle, Popup } from 'react-leaflet';
-import { Layers, AlertCircle } from 'lucide-react';
-import LoadingSpinner from '../shared/LoadingSpinner';
-import AIInsightsPanel from '../shared/AIInsightsPanel';
-import api from '../../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import AIInsightsPanel from './AIInsightsPanel';
+
+// Fix for default marker icons in Leaflet
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 const MapTab = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersLayerRef = useRef(null);
+  
+  const [mapLayer, setMapLayer] = useState('capacity');
   const [capacityData, setCapacityData] = useState(null);
   const [optimalLocations, setOptimalLocations] = useState(null);
   const [travelTimeData, setTravelTimeData] = useState(null);
-  const [mapLayer, setMapLayer] = useState('schools');
+  const [loading, setLoading] = useState(true);
 
+  // Fetch all data
   useEffect(() => {
-    loadData();
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [capacityRes, optimalRes, travelRes] = await Promise.all([
+          fetch('https://n8n.hantoush.space/webhook/3d4f2de1-22fc-4e9e-abb9-8fc73a046df5'),
+          fetch('https://n8n.hantoush.space/webhook/8bfc0a11-ee54-4f36-9c1a-b7fba1c9d71e'),
+          fetch('https://n8n.hantoush.space/webhook/d11e24e0-3a86-4b19-b4b5-4e6dfb8e2af6')
+        ]);
+
+        const capacity = await capacityRes.json();
+        const optimal = await optimalRes.json();
+        const travel = await travelRes.json();
+
+        console.log('Capacity Data:', capacity);
+        console.log('Optimal Locations:', optimal);
+        console.log('Travel Time Data:', travel);
+
+        setCapacityData(capacity);
+        setOptimalLocations(optimal);
+        setTravelTimeData(travel);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [capacity, optimal, travelTime] = await Promise.all([
-        api.getCapacityAnalysis(),
-        api.getOptimalLocations(),
-        api.getTravelTimeHeatmap()
-      ]);
-      
-      console.log('Capacity Data:', capacity);
-      console.log('Optimal Locations:', optimal);
-      console.log('Travel Time Data:', travelTime);
-      
-      setCapacityData(capacity);
-      setOptimalLocations(optimal);
-      setTravelTimeData(travelTime);
-    } catch (error) {
-      console.error('Error loading map data:', error);
-      setError('Failed to load map data. Please try again.');
-    } finally {
-      setLoading(false);
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    // Riyadh coordinates
+    const riyadhCenter = [24.7136, 46.6753];
+
+    const map = L.map(mapRef.current).setView(riyadhCenter, 11);
+
+    // Add CartoDB tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
+
+    // Create markers layer
+    markersLayerRef.current = L.layerGroup().addTo(map);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Helper function to extract coordinates from various field names
+  const extractCoordinates = (item) => {
+    // Try different possible field name patterns
+    const latFields = ['latitude', 'lat', 'Latitude', 'LAT', 'y'];
+    const lngFields = ['longitude', 'lng', 'lon', 'Longitude', 'LONGITUDE', 'LON', 'x'];
+    
+    let lat = null;
+    let lng = null;
+
+    // Search for latitude
+    for (const field of latFields) {
+      if (item[field] !== undefined && item[field] !== null) {
+        lat = parseFloat(item[field]);
+        break;
+      }
     }
+
+    // Search for longitude
+    for (const field of lngFields) {
+      if (item[field] !== undefined && item[field] !== null) {
+        lng = parseFloat(item[field]);
+        break;
+      }
+    }
+
+    // Check if we found valid coordinates
+    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+      // Validate coordinates are within reasonable bounds for Riyadh
+      if (lat >= 24 && lat <= 25 && lng >= 46 && lng <= 47) {
+        return { lat, lng };
+      }
+    }
+
+    return null;
   };
 
-  if (loading) {
-    return <LoadingSpinner message="Loading map data..." />;
-  }
+  // Update markers when layer or data changes
+  useEffect(() => {
+    if (!markersLayerRef.current || loading) return;
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <AlertCircle className="text-red-600 dark:text-red-400" size={48} />
-        <p className="text-gray-600 dark:text-gray-400">{error}</p>
-        <button
-          onClick={loadData}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+    // Clear existing markers
+    markersLayerRef.current.clearLayers();
 
-  const schools = capacityData?.overcapacity_schools || [];
-  const optimalLocs = optimalLocations?.optimal_locations || optimalLocations?.results?.optimal_locations || [];
-  const heatmapData = travelTimeData?.heatmap_data || travelTimeData?.results?.heatmap_data || [];
+    if (mapLayer === 'capacity' && capacityData?.schools) {
+      console.log('Adding capacity markers, total schools:', capacityData.schools.length);
+      
+      let addedMarkers = 0;
+      capacityData.schools.forEach((school, index) => {
+        const coords = extractCoordinates(school);
+        
+        if (coords) {
+          const utilizationRate = parseFloat(school.utilization_rate || 0);
+          
+          // Determine color based on utilization
+          let color = 'green';
+          if (utilizationRate > 120) {
+            color = 'red';
+          } else if (utilizationRate > 100) {
+            color = 'orange';
+          } else if (utilizationRate > 85) {
+            color = 'yellow';
+          }
 
-  const riyadhCenter = [24.7136, 46.6753];
+          const marker = L.circleMarker([coords.lat, coords.lng], {
+            radius: 8,
+            fillColor: color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
 
-  const getStatusColor = (utilization) => {
-    if (utilization >= 120) return '#ef4444';
-    if (utilization >= 100) return '#f59e0b';
-    if (utilization >= 90) return '#eab308';
-    return '#10b981';
-  };
+          marker.bindPopup(`
+            <div style="font-family: Inter, sans-serif;">
+              <strong>${school.school_name || 'Unknown School'}</strong><br>
+              <strong>District:</strong> ${school.district_name || 'N/A'}<br>
+              <strong>Capacity:</strong> ${school.capacity || 'N/A'}<br>
+              <strong>Students:</strong> ${school.current_enrollment || 'N/A'}<br>
+              <strong>Utilization:</strong> ${utilizationRate.toFixed(1)}%<br>
+              <strong>Type:</strong> ${school.school_type || 'N/A'}
+            </div>
+          `);
 
-  const getStatus = (utilization) => {
-    if (utilization >= 120) return 'Critical Overcapacity';
-    if (utilization >= 100) return 'Over Capacity';
-    if (utilization >= 90) return 'Near Capacity';
-    return 'Acceptable';
-  };
+          marker.addTo(markersLayerRef.current);
+          addedMarkers++;
+        } else {
+          console.warn(`School ${index} missing valid coordinates:`, school);
+        }
+      });
+      
+      console.log(`Successfully added ${addedMarkers} capacity markers`);
+    }
+
+    if (mapLayer === 'optimal' && optimalLocations?.recommendations) {
+      console.log('Adding optimal location markers, total:', optimalLocations.recommendations.length);
+      
+      let addedMarkers = 0;
+      optimalLocations.recommendations.forEach((location, index) => {
+        const coords = extractCoordinates(location);
+        
+        if (coords) {
+          const marker = L.circleMarker([coords.lat, coords.lng], {
+            radius: 10,
+            fillColor: 'purple',
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
+
+          marker.bindPopup(`
+            <div style="font-family: Inter, sans-serif;">
+              <strong>Recommended Location</strong><br>
+              <strong>School Type:</strong> ${location.school_type || 'Elementary'}<br>
+              <strong>Gender:</strong> ${location.gender || 'Boys'}<br>
+              <strong>Max Acceptable Travel:</strong> ${location.max_acceptable_travel_time_from_district_center || 'N/A'} min<br>
+              <strong>Methodology:</strong> ${location.methodology || 'K-means clustering'}
+            </div>
+          `);
+
+          marker.addTo(markersLayerRef.current);
+          addedMarkers++;
+        } else {
+          console.warn(`Optimal location ${index} missing valid coordinates:`, location);
+        }
+      });
+      
+      console.log(`Successfully added ${addedMarkers} optimal location markers`);
+    }
+
+    if (mapLayer === 'heatmap' && travelTimeData?.heatmap_data) {
+      console.log('Adding travel time markers, total:', travelTimeData.heatmap_data.length);
+      
+      let addedMarkers = 0;
+      travelTimeData.heatmap_data.forEach((point, index) => {
+        const coords = extractCoordinates(point);
+        
+        if (coords) {
+          const travelTime = parseFloat(point.avg_travel_time_minutes || 0);
+          
+          // Determine color based on travel time
+          let color = 'green';
+          if (travelTime > 30) {
+            color = 'red';
+          } else if (travelTime > 20) {
+            color = 'orange';
+          }
+
+          const marker = L.circleMarker([coords.lat, coords.lng], {
+            radius: 6,
+            fillColor: color,
+            color: '#fff',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.6
+          });
+
+          marker.bindPopup(`
+            <div style="font-family: Inter, sans-serif;">
+              <strong>Travel Time Analysis</strong><br>
+              <strong>District:</strong> ${point.from_district || 'N/A'}<br>
+              <strong>Avg Travel Time:</strong> ${travelTime.toFixed(1)} min
+            </div>
+          `);
+
+          marker.addTo(markersLayerRef.current);
+          addedMarkers++;
+        } else {
+          console.warn(`Travel time point ${index} missing valid coordinates:`, point);
+        }
+      });
+      
+      console.log(`Successfully added ${addedMarkers} travel time markers`);
+    }
+  }, [mapLayer, capacityData, optimalLocations, travelTimeData, loading]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Interactive Map
-        </h2>
-        
-        <div className="flex items-center space-x-2">
-          <Layers className="text-gray-600 dark:text-gray-400" size={20} />
-          <select
-            value={mapLayer}
-            onChange={(e) => setMapLayer(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+      {/* Layer Selector */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setMapLayer('capacity')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              mapLayer === 'capacity'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
           >
-            <option value="schools">School Locations ({schools.length})</option>
-            <option value="optimal">Optimal New Locations ({optimalLocs.length})</option>
-            <option value="heatmap">Travel Time Heatmap ({heatmapData.length})</option>
-          </select>
+            School Locations (20)
+          </button>
+          <button
+            onClick={() => setMapLayer('optimal')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              mapLayer === 'optimal'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            Optimal Locations (3)
+          </button>
+          <button
+            onClick={() => setMapLayer('heatmap')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              mapLayer === 'heatmap'
+                ? 'bg-orange-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            Travel Time Heatmap
+          </button>
         </div>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <p className="text-sm text-blue-800 dark:text-blue-200">
-          {mapLayer === 'schools' && `Showing ${schools.length} overcapacity schools. Click any marker for details.`}
-          {mapLayer === 'optimal' && `Showing ${optimalLocs.length} recommended locations for new schools.`}
-          {mapLayer === 'heatmap' && `Showing ${heatmapData.length} zones color-coded by travel time accessibility.`}
-        </p>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden" style={{ height: '600px' }}>
-        <MapContainer
-          center={riyadhCenter}
-          zoom={11}
-          style={{ height: '100%', width: '100%' }}
-          scrollWheelZoom={true}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            maxZoom={19}
-          />
-
-          {mapLayer === 'schools' && schools.map((school, index) => {
-            const lat = school.lat || school.latitude;
-            const lon = school.lon || school.longitude;
-            
-            if (!lat || !lon) return null;
-
-            const utilization = school.utilization || 0;
-            const color = getStatusColor(utilization);
-            const status = getStatus(utilization);
-
-            return (
-              <CircleMarker
-                key={`school-${index}`}
-                center={[lat, lon]}
-                radius={8}
-                pathOptions={{
-                  color: color,
-                  fillColor: color,
-                  fillOpacity: 0.7,
-                  weight: 2
-                }}
-              >
-                <Popup>
-                  <div className="text-sm min-w-[200px]">
-                    <h3 className="font-bold mb-2 text-base">{school.name || school.school_name || 'Unknown School'}</h3>
-                    <div className="space-y-1">
-                      <p><strong>District:</strong> {school.district || 'N/A'}</p>
-                      <p><strong>Type:</strong> {school.type || 'N/A'}</p>
-                      <p><strong>Gender:</strong> {school.gender || 'N/A'}</p>
-                      <p><strong>Enrollment:</strong> {school.enrollment?.toLocaleString() || 'N/A'}</p>
-                      <p><strong>Capacity:</strong> {school.capacity?.toLocaleString() || 'N/A'}</p>
-                      <p><strong>Utilization:</strong> <span style={{ color }}>{utilization.toFixed(1)}%</span></p>
-                      <p><strong>Status:</strong> <span style={{ color }}>{status}</span></p>
-                      {school.deficit > 0 && (
-                        <p className="text-red-600 font-semibold"><strong>Deficit:</strong> {school.deficit}</p>
-                      )}
-                    </div>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            );
-          })}
-
-          {mapLayer === 'optimal' && optimalLocs.map((location, index) => {
-            const lat = location.lat || location.latitude;
-            const lon = location.lon || location.longitude;
-            
-            if (!lat || !lon) return null;
-
-            return (
-              <CircleMarker
-                key={`optimal-${index}`}
-                center={[lat, lon]}
-                radius={10}
-                pathOptions={{
-                  color: '#8b5cf6',
-                  fillColor: '#8b5cf6',
-                  fillOpacity: 0.6,
-                  weight: 3
-                }}
-              >
-                <Popup>
-                  <div className="text-sm min-w-[200px]">
-                    <h3 className="font-bold mb-2 text-base">📍 Proposed Location #{index + 1}</h3>
-                    <div className="space-y-1">
-                      <p><strong>District:</strong> {location.district || 'N/A'}</p>
-                      <p><strong>Priority Score:</strong> {location.priority_score?.toFixed(2) || 'N/A'}</p>
-                      <p><strong>Coverage Score:</strong> {location.coverage_score?.toFixed(2) || 'N/A'}</p>
-                      <p><strong>Students to Serve:</strong> {location.students_to_serve?.toLocaleString() || 'N/A'}</p>
-                    </div>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            );
-          })}
-
-          {mapLayer === 'heatmap' && heatmapData.map((point, index) => {
-            const lat = point.lat || point.latitude;
-            const lon = point.lon || point.longitude;
-            
-            if (!lat || !lon) return null;
-
-            const travelTime = point.avg_travel_time || point.travel_time || 0;
-            const color = travelTime > 30 ? '#ef4444' : travelTime > 20 ? '#f59e0b' : '#10b981';
-
-            return (
-              <Circle
-                key={`heatmap-${index}`}
-                center={[lat, lon]}
-                radius={500}
-                pathOptions={{
-                  color: color,
-                  fillColor: color,
-                  fillOpacity: 0.3,
-                  weight: 1
-                }}
-              >
-                <Popup>
-                  <div className="text-sm">
-                    <h3 className="font-bold mb-2">Zone {index + 1}</h3>
-                    <p><strong>Avg Travel Time:</strong> {travelTime.toFixed(1)} min</p>
-                    <p><strong>Students Affected:</strong> {point.students_affected?.toLocaleString() || 'N/A'}</p>
-                  </div>
-                </Popup>
-              </Circle>
-            );
-          })}
-        </MapContainer>
-      </div>
-
+      {/* Map Container */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Legend</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {mapLayer === 'schools' && (
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {mapLayer === 'capacity' && 'School Capacity Overview'}
+            {mapLayer === 'optimal' && 'Recommended New School Locations'}
+            {mapLayer === 'heatmap' && 'Student Travel Time Analysis'}
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {mapLayer === 'capacity' && 'Showing 20 overcapacity schools. Click any marker for details.'}
+            {mapLayer === 'optimal' && 'AI-recommended locations for new schools based on demand analysis.'}
+            {mapLayer === 'heatmap' && 'Average travel time from district centers to nearest schools.'}
+          </p>
+        </div>
+
+        <div 
+          ref={mapRef} 
+          style={{ height: '600px', width: '100%' }}
+          className="rounded-lg border border-gray-200 dark:border-gray-700"
+        />
+
+        {/* Legend */}
+        <div className="mt-4 flex flex-wrap gap-4">
+          {mapLayer === 'capacity' && (
             <>
               <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 rounded-full bg-red-500"></div>
@@ -244,15 +328,37 @@ const MapTab = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                <span className="text-sm text-gray-700 dark:text-gray-300">Over Capacity</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Over Capacity (100-120%)</span>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-                <span className="text-sm text-gray-700 dark:text-gray-300">Near Capacity</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Near Capacity (85-100%)</span>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                <span className="text-sm text-gray-700 dark:text-gray-300">Acceptable</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Acceptable (&lt;85%)</span>
+              </div>
+            </>
+          )}
+          {mapLayer === 'optimal' && (
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 rounded-full bg-purple-500"></div>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Recommended Location</span>
+            </div>
+          )}
+          {mapLayer === 'heatmap' && (
+            <>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">&lt; 20 min</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">20-30 min</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">&gt; 30 min</span>
               </div>
             </>
           )}
