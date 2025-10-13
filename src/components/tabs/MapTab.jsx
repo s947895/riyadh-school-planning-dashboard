@@ -126,15 +126,17 @@ const MapTab = () => {
     // Clear existing markers
     markersLayerRef.current.clearLayers();
 
-    if (mapLayer === 'capacity' && capacityData?.schools) {
-      console.log('Adding capacity markers, total schools:', capacityData.schools.length);
+    if (mapLayer === 'capacity' && capacityData?.overcapacity_schools) {
+      console.log('Adding capacity markers, total schools:', capacityData.overcapacity_schools.length);
+      console.log('First school sample:', capacityData.overcapacity_schools[0]);
+      console.log('Available fields:', Object.keys(capacityData.overcapacity_schools[0] || {}));
       
       let addedMarkers = 0;
-      capacityData.schools.forEach((school, index) => {
+      capacityData.overcapacity_schools.forEach((school, index) => {
         const coords = extractCoordinates(school);
         
         if (coords) {
-          const utilizationRate = parseFloat(school.utilization_rate || 0);
+          const utilizationRate = parseFloat(school.utilization || school.utilization_rate || 0);
           
           // Determine color based on utilization
           let color = 'green';
@@ -157,12 +159,12 @@ const MapTab = () => {
 
           marker.bindPopup(`
             <div style="font-family: Inter, sans-serif;">
-              <strong>${school.school_name || 'Unknown School'}</strong><br>
-              <strong>District:</strong> ${school.district_name || 'N/A'}<br>
+              <strong>${school.name || school.school_name || 'Unknown School'}</strong><br>
+              <strong>District:</strong> ${school.district || school.district_name || 'N/A'}<br>
               <strong>Capacity:</strong> ${school.capacity || 'N/A'}<br>
-              <strong>Students:</strong> ${school.current_enrollment || 'N/A'}<br>
+              <strong>Students:</strong> ${school.enrollment || school.current_enrollment || 'N/A'}<br>
               <strong>Utilization:</strong> ${utilizationRate.toFixed(1)}%<br>
-              <strong>Type:</strong> ${school.school_type || 'N/A'}
+              <strong>Type:</strong> ${school.type || school.school_type || 'N/A'}
             </div>
           `);
 
@@ -178,6 +180,8 @@ const MapTab = () => {
 
     if (mapLayer === 'optimal' && optimalLocations?.recommendations) {
       console.log('Adding optimal location markers, total:', optimalLocations.recommendations.length);
+      console.log('First optimal location sample:', optimalLocations.recommendations[0]);
+      console.log('Available fields:', Object.keys(optimalLocations.recommendations[0] || {}));
       
       let addedMarkers = 0;
       optimalLocations.recommendations.forEach((location, index) => {
