@@ -7,17 +7,15 @@ const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
   }
 
   const formatContent = (content) => {
-    // Handle different data types
     if (!content) return null;
     
-    // Convert to string if it's not already
+    // Handle JSON object from n8n
     let textContent = content;
-    if (typeof content !== 'string') {
-      try {
-        textContent = JSON.stringify(content, null, 2);
-      } catch (e) {
-        textContent = String(content);
-      }
+    if (typeof content === 'object') {
+      // Extract the explanation field if it exists
+      textContent = content.explanation || content.analysis || JSON.stringify(content, null, 2);
+    } else if (typeof content !== 'string') {
+      textContent = String(content);
     }
     
     // Split by newlines and format
@@ -25,43 +23,37 @@ const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
       const trimmed = line.trim();
       if (!trimmed) return null;
 
-      // Handle headers (lines ending with :)
-      if (trimmed.endsWith(':') && trimmed.length < 50) {
+      // Handle markdown headers (## Header)
+      if (trimmed.startsWith('##')) {
         return (
           <h4 key={i} className="font-semibold text-gray-900 dark:text-white mt-4 mb-2">
+            {trimmed.replace(/^##\s*/, '')}
+          </h4>
+        );
+      }
+
+      // Handle bold headers (lines ending with :)
+      if (trimmed.endsWith(':') && trimmed.length < 60 && !trimmed.includes('http')) {
+        return (
+          <h4 key={i} className="font-semibold text-gray-900 dark:text-white mt-3 mb-2">
             {trimmed}
           </h4>
         );
       }
 
       // Handle bullet points
-      if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
+      if (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.match(/^[\d]+\./)) {
         return (
-          <li key={i} className="text-sm text-gray-700 dark:text-gray-300 ml-4 mb-1">
-            {trimmed.substring(1).trim()}
+          <li key={i} className="text-sm text-gray-700 dark:text-gray-300 ml-4 mb-1 list-disc">
+            {trimmed.replace(/^[-•\d.]\s*/, '')}
           </li>
         );
       }
 
-      // Handle numbered lists
-      if (/^\d+\./.test(trimmed)) {
-        const parts = trimmed.split(/\*\*(.*?)\*\*/g);
-        return (
-          <p key={i} className="text-sm text-gray-700 dark:text-gray-300 mb-2 ml-4">
-            {parts.map((part, j) => 
-              j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part
-            )}
-          </p>
-        );
-      }
-
-      // Regular paragraphs with bold support
-      const parts = trimmed.split(/\*\*(.*?)\*\*/g);
+      // Regular paragraphs
       return (
         <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-2">
-          {parts.map((part, j) => 
-            j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part
-          )}
+          {trimmed}
         </p>
       );
     });
