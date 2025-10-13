@@ -4,6 +4,27 @@ import { Sparkles } from 'lucide-react';
 const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
   if (!insights) return null;
 
+  // Handle different formats - insights could be an object or string
+  let content = '';
+  
+  if (typeof insights === 'string') {
+    content = insights;
+  } else if (typeof insights === 'object') {
+    // Extract the text content from the insights object
+    // Based on your API structure: { explanation, summary, recommendations, etc }
+    content = insights.explanation || insights.summary || '';
+    
+    // If recommendations array exists, add it to content
+    if (insights.recommendations && Array.isArray(insights.recommendations)) {
+      content += '\n\n## Recommendations\n';
+      insights.recommendations.forEach((rec, idx) => {
+        content += `\n${idx + 1}. ${rec}`;
+      });
+    }
+  }
+
+  if (!content) return null;
+
   // Parse markdown-style content
   const formatContent = (text) => {
     return text.split('\n').map((line, i) => {
@@ -23,6 +44,22 @@ const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
           <h5 key={i} className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">
             {trimmed.replace('### ', '')}
           </h5>
+        );
+      }
+
+      // Numbered lists
+      if (/^\d+\.\s/.test(trimmed)) {
+        const content = trimmed.replace(/^\d+\.\s/, '');
+        const parts = content.split(/\*\*(.*?)\*\*/g);
+        return (
+          <p key={i} className="text-sm text-gray-700 dark:text-gray-300 mb-2 ml-4">
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-2">
+              {trimmed.match(/^\d+/)[0]}.
+            </span>
+            {parts.map((part, j) => 
+              j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part
+            )}
+          </p>
         );
       }
 
@@ -64,7 +101,7 @@ const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
             {title}
           </h3>
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            {formatContent(insights)}
+            {formatContent(content)}
           </div>
         </div>
       </div>
