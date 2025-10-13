@@ -27,11 +27,11 @@ class ApiService {
     }
   }
 
-  // 1. Capacity Analysis
+  // 1. School Analysis (was: Capacity Analysis)
   async getCapacityAnalysis() {
     try {
       const data = await this.fetchWithRetry(
-        `${API_BASE_URL}/analyze-capacity`,
+        `${API_BASE_URL}/school-analysis`,
         { method: 'POST' }
       );
       return data;
