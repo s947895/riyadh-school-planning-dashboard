@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -6,17 +5,19 @@ import { Filter, Eye, Edit3, RotateCcw, Info } from 'lucide-react';
 import AIInsightsPanel from '../shared/AIInsightsPanel';
 
 // Fix default marker icons
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+if (typeof window !== 'undefined') {
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  });
+}
 
 const createStarIcon = (color) => {
   return L.divIcon({
     className: 'custom-star-icon',
-    html: `<div style="width: 30px; height: 30px; background-color: ${color}; border: 3px solid white; border-radius: 4px; transform: rotate(45deg); box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+    html: '<div style="width: 30px; height: 30px; background-color: ' + color + '; border: 3px solid white; border-radius: 4px; transform: rotate(45deg); box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>',
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   });
@@ -46,30 +47,27 @@ const MapTab = () => {
     utilizationMax: 200,
     schoolType: 'all',
     gender: 'all',
-    showCritical: true,
-    showOverCapacity: true,
-    showNearCapacity: true,
-    showAcceptable: true,
   });
   const [showFilters, setShowFilters] = useState(false);
 
   const [whatIfMode, setWhatIfMode] = useState(false);
   const [capacityChanges, setCapacityChanges] = useState({});
 
-  // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [capacityRes, optimalRes, travelRes] = await Promise.all([
+        const responses = await Promise.all([
           fetch('https://n8n.hantoush.space/webhook/school-analysis', { method: 'POST' }),
           fetch('https://n8n.hantoush.space/webhook/find-optimal-locations', { method: 'POST' }),
           fetch('https://n8n.hantoush.space/webhook/travel-time-heatmap', { method: 'POST' })
         ]);
 
-        const capacity = await capacityRes.json();
-        const optimal = await optimalRes.json();
-        const travel = await travelRes.json();
+        const [capacity, optimal, travel] = await Promise.all([
+          responses[0].json(),
+          responses[1].json(),
+          responses[2].json()
+        ]);
 
         const schools = capacity.overcapacity_schools || capacity.results?.schools || capacity.schools || [];
         const optimalLocs = optimal.recommendations || optimal.results?.optimal_locations || [];
@@ -82,7 +80,7 @@ const MapTab = () => {
         setOptimalApiData(optimal);
         setTravelApiData(travel);
       } catch (error) {
-        console.error('Error loading map data:', error);
+        console.error('Error:', error);
       } finally {
         setLoading(false);
       }
@@ -91,14 +89,13 @@ const MapTab = () => {
     fetchData();
   }, []);
 
-  // Initialize map
   useEffect(() => {
     if (loading || mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current).setView([24.7136, 46.6753], 11);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      attribution: '&copy; OpenStreetMap',
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(map);
@@ -118,29 +115,29 @@ const MapTab = () => {
   }, [loading]);
 
   const extractCoordinates = (item) => {
-    const latFields = ['latitude', 'lat', 'Latitude', 'LAT', 'y', 'center_lat'];
-    const lngFields = ['longitude', 'lng', 'lon', 'Longitude', 'LON', 'x', 'center_lon'];
+    const latFields = ['latitude', 'lat', 'Latitude', 'center_lat'];
+    const lngFields = ['longitude', 'lng', 'lon', 'center_lon'];
     
     let lat = null;
     let lng = null;
 
-    for (const field of latFields) {
-      if (item[field] !== undefined && item[field] !== null) {
-        lat = parseFloat(item[field]);
+    for (let i = 0; i < latFields.length; i++) {
+      if (item[latFields[i]]) {
+        lat = parseFloat(item[latFields[i]]);
         break;
       }
     }
 
-    for (const field of lngFields) {
-      if (item[field] !== undefined && item[field] !== null) {
-        lng = parseFloat(item[field]);
+    for (let i = 0; i < lngFields.length; i++) {
+      if (item[lngFields[i]]) {
+        lng = parseFloat(item[lngFields[i]]);
         break;
       }
     }
 
-    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
       if (lat >= 23 && lat <= 26 && lng >= 45 && lng <= 48) {
-        return { lat, lng };
+        return { lat: lat, lng: lng };
       }
     }
 
@@ -148,7 +145,7 @@ const MapTab = () => {
   };
 
   const getMarkerColor = (school) => {
-    const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
+    const capacity = parseInt(capacityChanges[school.id] || school.capacity || 0);
     const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
     const utilization = capacity > 0 ? (enrollment / capacity) * 100 : 0;
 
@@ -158,25 +155,6 @@ const MapTab = () => {
     return '#22c55e';
   };
 
-  const getFilteredSchools = () => {
-    return allSchools.filter(school => {
-      const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
-      const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
-      const utilization = capacity > 0 ? (enrollment / capacity) * 100 : 0;
-
-      if (utilization < filters.utilizationMin || utilization > filters.utilizationMax) return false;
-      if (filters.schoolType !== 'all' && school.school_type !== filters.schoolType) return false;
-      if (filters.gender !== 'all' && school.gender !== filters.gender) return false;
-      if (utilization >= 120 && !filters.showCritical) return false;
-      if (utilization >= 100 && utilization < 120 && !filters.showOverCapacity) return false;
-      if (utilization >= 85 && utilization < 100 && !filters.showNearCapacity) return false;
-      if (utilization < 85 && !filters.showAcceptable) return false;
-
-      return true;
-    });
-  };
-
-  // Update markers
   useEffect(() => {
     if (!schoolsLayerRef.current || !optimalLayerRef.current || !heatmapLayerRef.current || loading) return;
 
@@ -186,48 +164,38 @@ const MapTab = () => {
 
     // DISTRICT HEATMAP
     if (showHeatmap && travelTimeData.length > 0) {
-      const districtTravelTime = {};
+      const districtMap = {};
       
       travelTimeData.forEach((point) => {
-        const district = point.district || point.from_district || point.district_name || point.name;
-        const travelTime = parseFloat(
-          point.avg_travel_time_minutes || 
-          point.nearest_school_time || 
-          point.travel_time || 
-          point.time ||
-          0
-        );
+        const district = point.district || point.from_district || point.district_name;
+        const time = parseFloat(point.avg_travel_time_minutes || point.nearest_school_time || 0);
 
-        if (!district) return;
-        
-        if (!districtTravelTime[district]) {
-          districtTravelTime[district] = {
-            points: [],
-            totalTime: 0,
-            count: 0
-          };
+        if (district) {
+          if (!districtMap[district]) {
+            districtMap[district] = { points: [], total: 0, count: 0 };
+          }
+          districtMap[district].points.push(point);
+          districtMap[district].total = districtMap[district].total + time;
+          districtMap[district].count = districtMap[district].count + 1;
         }
-        
-        districtTravelTime[district].points.push(point);
-        districtTravelTime[district].totalTime += travelTime;
-        districtTravelTime[district].count += 1;
       });
 
-      Object.entries(districtTravelTime).forEach(([district, data]) => {
+      Object.keys(districtMap).forEach((district) => {
+        const data = districtMap[district];
         if (data.count === 0) return;
         
-        const avgTime = data.totalTime / data.count;
+        const avgTime = data.total / data.count;
 
         let centerLat = 0;
         let centerLng = 0;
         let validPoints = 0;
         
-        data.points.forEach(point => {
+        data.points.forEach((point) => {
           const coords = extractCoordinates(point);
           if (coords) {
-            centerLat += coords.lat;
-            centerLng += coords.lng;
-            validPoints += 1;
+            centerLat = centerLat + coords.lat;
+            centerLng = centerLng + coords.lng;
+            validPoints = validPoints + 1;
           }
         });
         
@@ -236,17 +204,15 @@ const MapTab = () => {
         centerLat = centerLat / validPoints;
         centerLng = centerLng / validPoints;
         
-        let color;
-        let opacity;
+        let color = '#22c55e';
+        let opacity = 0.2;
+        
         if (avgTime > 20) {
           color = '#ef4444';
           opacity = 0.3;
         } else if (avgTime > 10) {
           color = '#f97316';
           opacity = 0.25;
-        } else {
-          color = '#22c55e';
-          opacity = 0.2;
         }
 
         const circle = L.circle([centerLat, centerLng], {
@@ -258,16 +224,9 @@ const MapTab = () => {
           opacity: 0.5
         });
 
-        circle.bindPopup(`
-          <div style="font-family: Inter, sans-serif;">
-            <strong>${district}</strong><br>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-              <strong>Avg Travel Time:</strong> ${avgTime.toFixed(1)} min<br>
-              <strong>Status:</strong> ${avgTime > 20 ? '🔴 High' : avgTime > 10 ? '🟠 Medium' : '🟢 Good'}
-            </div>
-          </div>
-        `);
+        const popupHtml = '<div style="font-family: Inter, sans-serif;"><strong>' + district + '</strong><br><div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;"><strong>Avg Travel Time:</strong> ' + avgTime.toFixed(1) + ' min<br><strong>Status:</strong> ' + (avgTime > 20 ? '🔴 High' : avgTime > 10 ? '🟠 Medium' : '🟢 Good') + '</div></div>';
 
+        circle.bindPopup(popupHtml);
         circle.addTo(heatmapLayerRef.current);
       });
     }
@@ -282,43 +241,25 @@ const MapTab = () => {
           icon: createStarIcon('#9333ea')
         });
 
-        const studentsServed = location.estimated_students_served || 0;
-        const recommendedCapacity = location.recommended_capacity || 800;
-        const districtsServed = location.districts_served || [];
-        const avgDistance = location.avg_distance_km || 0;
+        const students = location.estimated_students_served || 0;
+        const capacity = location.recommended_capacity || 800;
+        const districts = location.districts_served || [];
+        const distance = location.avg_distance_km || 0;
 
-        marker.bindPopup(`
-          <div style="font-family: Inter, sans-serif; min-width: 280px;">
-            <div style="background: #9333ea; color: white; padding: 12px; margin: -12px -12px 12px -12px;">
-              <strong>📍 Optimal Location ${location.location_id || ''}</strong><br>
-              <span style="font-size: 12px;">${location.recommended_district || ''}</span>
-            </div>
-            
-            <div style="background: #f3f4f6; padding: 10px; border-radius: 6px;">
-              <strong>📊 Impact:</strong><br>
-              <div style="margin-top: 6px; font-size: 13px;">
-                <strong>• Students:</strong> ${studentsServed.toLocaleString()}<br>
-                <strong>• Capacity:</strong> ${recommendedCapacity.toLocaleString()}<br>
-                <strong>• Districts:</strong> ${districtsServed.length}<br>
-                <strong>• Distance:</strong> ${avgDistance.toFixed(1)} km
-              </div>
-            </div>
-          </div>
-        `);
+        const popupHtml = '<div style="font-family: Inter, sans-serif; min-width: 280px;"><div style="background: #9333ea; color: white; padding: 12px; margin: -12px -12px 12px -12px;"><strong>📍 Optimal Location ' + (location.location_id || '') + '</strong><br><span style="font-size: 12px;">' + (location.recommended_district || '') + '</span></div><div style="background: #f3f4f6; padding: 10px; border-radius: 6px;"><strong>📊 Impact:</strong><br><div style="margin-top: 6px; font-size: 13px;"><strong>• Students:</strong> ' + students.toLocaleString() + '<br><strong>• Capacity:</strong> ' + capacity.toLocaleString() + '<br><strong>• Districts:</strong> ' + districts.length + '<br><strong>• Distance:</strong> ' + distance.toFixed(1) + ' km</div></div></div>';
 
+        marker.bindPopup(popupHtml);
         marker.addTo(optimalLayerRef.current);
       });
     }
 
     // SCHOOLS
     if (showSchools) {
-      const filteredSchools = getFilteredSchools();
-
-      filteredSchools.forEach((school) => {
+      allSchools.forEach((school) => {
         const coords = extractCoordinates(school);
         if (!coords) return;
 
-        const originalCapacity = parseInt(school.capacity || school.design_capacity || 0);
+        const originalCapacity = parseInt(school.capacity || 0);
         const adjustedCapacity = parseInt(capacityChanges[school.id] || originalCapacity);
         const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
         const utilization = adjustedCapacity > 0 ? ((enrollment / adjustedCapacity) * 100).toFixed(1) : 0;
@@ -336,87 +277,32 @@ const MapTab = () => {
         popupDiv.style.fontFamily = 'Inter, sans-serif';
         popupDiv.style.minWidth = '260px';
         
-        popupDiv.innerHTML = `
-          <div style="background: ${getMarkerColor(school)}; color: white; padding: 10px; margin: -12px -12px 12px -12px;">
-            <strong>${school.school_name || school.name || 'School'}</strong><br>
-            <span style="font-size: 11px;">${school.district || school.district_name || ''}</span>
-          </div>
-          
-          ${whatIfMode ? `
-            <div style="background: #fef3c7; padding: 8px; margin-bottom: 10px;">
-              <strong style="color: #92400e; font-size: 12px;">🔧 What-If Mode</strong>
-            </div>
-            <div style="margin-bottom: 10px;">
-              <label style="font-size: 12px; font-weight: 600;">Adjust Capacity:</label>
-              <input 
-                type="number" 
-                id="capacity-input-${school.id}"
-                value="${adjustedCapacity}"
-                min="0"
-                style="width: 100%; padding: 6px; border: 2px solid #e5e7eb; border-radius: 4px; margin-top: 4px;"
-              />
-              <button 
-                id="update-btn-${school.id}"
-                style="margin-top: 6px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"
-              >
-                Update Capacity
-              </button>
-              ${adjustedCapacity !== originalCapacity ? `
-                <button 
-                  id="reset-btn-${school.id}"
-                  style="margin-top: 4px; padding: 4px 8px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"
-                >
-                  Reset to ${originalCapacity}
-                </button>
-              ` : ''}
-            </div>
-          ` : ''}
+        let popupHtml = '<div style="background: ' + getMarkerColor(school) + '; color: white; padding: 10px; margin: -12px -12px 12px -12px;"><strong>' + (school.school_name || school.name || 'School') + '</strong><br><span style="font-size: 11px;">' + (school.district || '') + '</span></div>';
+        
+        if (whatIfMode) {
+          popupHtml += '<div style="background: #fef3c7; padding: 8px; margin-bottom: 10px;"><strong style="color: #92400e; font-size: 12px;">🔧 What-If Mode</strong></div><div style="margin-bottom: 10px;"><label style="font-size: 12px; font-weight: 600;">Adjust Capacity:</label><input type="number" id="capacity-input-' + school.id + '" value="' + adjustedCapacity + '" min="0" style="width: 100%; padding: 6px; border: 2px solid #e5e7eb; border-radius: 4px; margin-top: 4px;" /><button id="update-btn-' + school.id + '" style="margin-top: 6px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Update Capacity</button></div>';
+        }
 
-          <div style="background: #f9fafb; padding: 8px; border-radius: 6px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
-              <div>
-                <strong>Capacity:</strong><br>
-                <span style="font-size: 14px;">${adjustedCapacity.toLocaleString()}</span>
-              </div>
-              <div>
-                <strong>Enrollment:</strong><br>
-                <span style="font-size: 14px;">${enrollment.toLocaleString()}</span>
-              </div>
-              <div>
-                <strong>Utilization:</strong><br>
-                <span style="font-size: 14px;">${utilization}%</span>
-              </div>
-            </div>
-          </div>
-        `;
+        popupHtml += '<div style="background: #f9fafb; padding: 8px; border-radius: 6px;"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;"><div><strong>Capacity:</strong><br><span style="font-size: 14px;">' + adjustedCapacity.toLocaleString() + '</span></div><div><strong>Enrollment:</strong><br><span style="font-size: 14px;">' + enrollment.toLocaleString() + '</span></div><div><strong>Utilization:</strong><br><span style="font-size: 14px;">' + utilization + '%</span></div></div></div>';
 
+        popupDiv.innerHTML = popupHtml;
         marker.bindPopup(popupDiv);
 
         if (whatIfMode) {
           marker.on('popupopen', () => {
-            const updateBtn = document.getElementById(`update-btn-${school.id}`);
-            const resetBtn = document.getElementById(`reset-btn-${school.id}`);
-            const input = document.getElementById(`capacity-input-${school.id}`);
+            const updateBtn = document.getElementById('update-btn-' + school.id);
+            const input = document.getElementById('capacity-input-' + school.id);
 
             if (updateBtn && input) {
               updateBtn.addEventListener('click', () => {
                 const newCapacity = parseInt(input.value);
                 if (!isNaN(newCapacity) && newCapacity >= 0) {
-                  setCapacityChanges(prev => ({
-                    ...prev,
-                    [school.id]: newCapacity
-                  }));
+                  setCapacityChanges(function(prev) {
+                    const updated = Object.assign({}, prev);
+                    updated[school.id] = newCapacity;
+                    return updated;
+                  });
                 }
-              });
-            }
-
-            if (resetBtn) {
-              resetBtn.addEventListener('click', () => {
-                setCapacityChanges(prev => {
-                  const updated = { ...prev };
-                  delete updated[school.id];
-                  return updated;
-                });
               });
             }
           });
@@ -425,7 +311,7 @@ const MapTab = () => {
         marker.addTo(schoolsLayerRef.current);
       });
     }
-  }, [allSchools, optimalLocations, travelTimeData, showSchools, showOptimal, showHeatmap, filters, whatIfMode, capacityChanges, loading]);
+  }, [allSchools, optimalLocations, travelTimeData, showSchools, showOptimal, showHeatmap, whatIfMode, capacityChanges, loading, filters]);
 
   if (loading) {
     return (
@@ -448,34 +334,19 @@ const MapTab = () => {
             <h3 className="font-semibold text-sm text-gray-900 dark:text-white mb-2">Layers</h3>
             
             <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showSchools}
-                onChange={(e) => setShowSchools(e.target.checked)}
-                className="w-4 h-4"
-              />
+              <input type="checkbox" checked={showSchools} onChange={(e) => setShowSchools(e.target.checked)} className="w-4 h-4" />
               <Eye size={16} className={showSchools ? 'text-blue-600' : 'text-gray-400'} />
               <span className="text-sm text-gray-700 dark:text-gray-300">Schools</span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showOptimal}
-                onChange={(e) => setShowOptimal(e.target.checked)}
-                className="w-4 h-4"
-              />
+              <input type="checkbox" checked={showOptimal} onChange={(e) => setShowOptimal(e.target.checked)} className="w-4 h-4" />
               <Eye size={16} className={showOptimal ? 'text-purple-600' : 'text-gray-400'} />
               <span className="text-sm text-gray-700 dark:text-gray-300">Optimal</span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showHeatmap}
-                onChange={(e) => setShowHeatmap(e.target.checked)}
-                className="w-4 h-4"
-              />
+              <input type="checkbox" checked={showHeatmap} onChange={(e) => setShowHeatmap(e.target.checked)} className="w-4 h-4" />
               <Eye size={16} className={showHeatmap ? 'text-green-600' : 'text-gray-400'} />
               <span className="text-sm text-gray-700 dark:text-gray-300">Heatmap</span>
             </label>
@@ -483,33 +354,19 @@ const MapTab = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
             <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={whatIfMode}
-                onChange={(e) => {
-                  setWhatIfMode(e.target.checked);
-                  if (!e.target.checked) setCapacityChanges({});
-                }}
-                className="w-4 h-4"
-              />
+              <input type="checkbox" checked={whatIfMode} onChange={(e) => { setWhatIfMode(e.target.checked); if (!e.target.checked) setCapacityChanges({}); }} className="w-4 h-4" />
               <Edit3 size={16} className={whatIfMode ? 'text-orange-600' : 'text-gray-400'} />
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">What-If</span>
             </label>
             {whatIfMode && Object.keys(capacityChanges).length > 0 && (
-              <button
-                onClick={() => setCapacityChanges({})}
-                className="mt-2 flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700"
-              >
+              <button onClick={() => setCapacityChanges({})} className="mt-2 flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700">
                 <RotateCcw size={12} />
                 <span>Reset All</span>
               </button>
             )}
           </div>
 
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
+          <button onClick={() => setShowFilters(!showFilters)} className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700">
             <div className="flex items-center space-x-2">
               <Filter size={16} className="text-gray-600 dark:text-gray-400" />
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Filters</span>
@@ -520,48 +377,14 @@ const MapTab = () => {
           {showFilters && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-3 max-w-xs">
               <div>
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-2">
-                  Utilization: {filters.utilizationMin}%-{filters.utilizationMax}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="200"
-                  value={filters.utilizationMin}
-                  onChange={(e) => setFilters({...filters, utilizationMin: parseInt(e.target.value)})}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">Type</label>
-                <select
-                  value={filters.schoolType}
-                  onChange={(e) => setFilters({...filters, schoolType: e.target.value})}
-                  className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
-                >
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-2">Type</label>
+                <select value={filters.schoolType} onChange={(e) => setFilters({...filters, schoolType: e.target.value})} className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
                   <option value="all">All</option>
                   <option value="Elementary">Elementary</option>
                   <option value="Intermediate">Intermediate</option>
                   <option value="High">High</option>
                 </select>
               </div>
-
-              <button
-                onClick={() => setFilters({
-                  utilizationMin: 0,
-                  utilizationMax: 200,
-                  schoolType: 'all',
-                  gender: 'all',
-                  showCritical: true,
-                  showOverCapacity: true,
-                  showNearCapacity: true,
-                  showAcceptable: true,
-                })}
-                className="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 py-2 px-3 rounded text-sm"
-              >
-                Reset Filters
-              </button>
             </div>
           )}
         </div>
@@ -592,19 +415,19 @@ const MapTab = () => {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Critical (≥120%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Critical</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Over (100-119%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Over</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Near (85-99%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Near</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-gray-700 dark:text-gray-300">OK (&lt;85%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">OK</span>
                 </div>
               </div>
             </div>
@@ -635,25 +458,19 @@ const MapTab = () => {
       <div className="w-96 bg-gray-50 dark:bg-gray-900 p-4 space-y-4 overflow-y-auto">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">AI Insights</h2>
         
-        {optimalApiData?.ai_insights && showOptimal && (
+        {optimalApiData && optimalApiData.ai_insights && showOptimal && (
           <div className="mb-4">
-            <AIInsightsPanel 
-              insights={optimalApiData.ai_insights} 
-              title="Location Analysis" 
-            />
+            <AIInsightsPanel insights={optimalApiData.ai_insights} title="Location Analysis" />
           </div>
         )}
         
-        {travelApiData?.ai_insights && showHeatmap && (
+        {travelApiData && travelApiData.ai_insights && showHeatmap && (
           <div>
-            <AIInsightsPanel 
-              insights={travelApiData.ai_insights} 
-              title="Travel Time Analysis" 
-            />
+            <AIInsightsPanel insights={travelApiData.ai_insights} title="Travel Time Analysis" />
           </div>
         )}
 
-        {!optimalApiData?.ai_insights && !travelApiData?.ai_insights && (
+        {(!optimalApiData || !optimalApiData.ai_insights) && (!travelApiData || !travelApiData.ai_insights) && (
           <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-8">
             <Info size={32} className="mx-auto mb-2 opacity-50" />
             <p>Enable layers to see AI insights</p>
@@ -665,6 +482,13 @@ const MapTab = () => {
 };
 
 export default MapTab;
+
+
+
+
+
+
+
 
 
 
