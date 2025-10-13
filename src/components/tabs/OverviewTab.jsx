@@ -37,7 +37,7 @@ const OverviewTab = () => {
   // Extract data from the actual API response structure
   const summary = capacityData?.summary || {};
   const overcapacitySchools = capacityData?.overcapacity_schools || [];
-  const priorities = districtData?.priorities || [];
+  const priorities = districtData?.district_priorities || [];
   const topPriorities = priorities.slice(0, 5);
 
   // Calculate total students from overcapacity schools
