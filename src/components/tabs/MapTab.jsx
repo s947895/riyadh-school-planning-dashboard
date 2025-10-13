@@ -1,13 +1,11 @@
-// MapTab.jsx - FIXED VERSION
-// Addresses: AI panel positioning, what-if travel time recalculation, district color debugging
-
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Filter, Eye, EyeOff, Edit3, RotateCcw, Info, AlertCircle } from 'lucide-react';
+import { Filter, Eye, Edit3, RotateCcw, Info } from 'lucide-react';
 import AIInsightsPanel from '../shared/AIInsightsPanel';
 
-// Fix for default marker icons
+// Fix default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -15,19 +13,10 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Custom icon for optimal locations
 const createStarIcon = (color) => {
   return L.divIcon({
     className: 'custom-star-icon',
-    html: `<div style="
-      width: 30px; 
-      height: 30px; 
-      background-color: ${color}; 
-      border: 3px solid white;
-      border-radius: 4px;
-      transform: rotate(45deg);
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    "></div>`,
+    html: `<div style="width: 30px; height: 30px; background-color: ${color}; border: 3px solid white; border-radius: 4px; transform: rotate(45deg); box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   });
@@ -64,13 +53,8 @@ const MapTab = () => {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  // What-if analysis
   const [whatIfMode, setWhatIfMode] = useState(false);
   const [capacityChanges, setCapacityChanges] = useState({});
-  const [recalculatedTravelTimes, setRecalculatedTravelTimes] = useState({});
-
-  // Debug info
-  const [debugInfo, setDebugInfo] = useState('');
 
   // Fetch data
   useEffect(() => {
@@ -87,27 +71,9 @@ const MapTab = () => {
         const optimal = await optimalRes.json();
         const travel = await travelRes.json();
 
-        console.log('=== API RESPONSES ===');
-        console.log('Capacity:', capacity);
-        console.log('Optimal:', optimal);
-        console.log('Travel:', travel);
-
         const schools = capacity.overcapacity_schools || capacity.results?.schools || capacity.schools || [];
         const optimalLocs = optimal.recommendations || optimal.results?.optimal_locations || [];
         const travelData = travel.district_analysis || travel.heatmap_data || travel.results?.heatmap_data || [];
-
-        console.log('=== EXTRACTED DATA ===');
-        console.log('Schools:', schools.length, schools[0]);
-        console.log('Optimal:', optimalLocs.length, optimalLocs[0]);
-        console.log('Travel Data:', travelData.length, travelData[0]);
-
-        // Debug travel time data structure
-        if (travelData.length > 0) {
-          const sample = travelData[0];
-          const debugMsg = `Travel Data Sample: ${JSON.stringify(sample, null, 2)}`;
-          console.log(debugMsg);
-          setDebugInfo(debugMsg);
-        }
 
         setAllSchools(schools);
         setOptimalLocations(optimalLocs);
@@ -117,7 +83,6 @@ const MapTab = () => {
         setTravelApiData(travel);
       } catch (error) {
         console.error('Error loading map data:', error);
-        setDebugInfo(`Error: ${error.message}`);
       } finally {
         setLoading(false);
       }
@@ -152,7 +117,6 @@ const MapTab = () => {
     };
   }, [loading]);
 
-  // Extract coordinates
   const extractCoordinates = (item) => {
     const latFields = ['latitude', 'lat', 'Latitude', 'LAT', 'y', 'center_lat'];
     const lngFields = ['longitude', 'lng', 'lon', 'Longitude', 'LON', 'x', 'center_lon'];
@@ -183,119 +147,6 @@ const MapTab = () => {
     return null;
   };
 
-  // Calculate distance between two points (Haversine formula)
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radius of Earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
-  // Recalculate travel times based on capacity changes
-  const recalculateTravelTimes = () => {
-    if (!whatIfMode || Object.keys(capacityChanges).length === 0) {
-      return travelTimeData;
-    }
-
-    console.log('=== RECALCULATING TRAVEL TIMES ===');
-    
-    // Get schools with updated capacities
-    const updatedSchools = allSchools.map(school => ({
-      ...school,
-      capacity: parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0),
-      enrollment: parseInt(school.enrollment || school.current_enrollment || 0)
-    }));
-
-    // Group schools by district to find available capacity per district
-    const districtCapacity = {};
-    updatedSchools.forEach(school => {
-      const district = school.district || school.district_name;
-      const coords = extractCoordinates(school);
-      if (!district || !coords) return;
-
-      if (!districtCapacity[district]) {
-        districtCapacity[district] = {
-          schools: [],
-          availableCapacity: 0,
-          totalEnrollment: 0
-        };
-      }
-
-      const availableSeats = Math.max(0, school.capacity - school.enrollment);
-      districtCapacity[district].schools.push({
-        ...school,
-        coords,
-        availableSeats
-      });
-      districtCapacity[district].availableCapacity += availableSeats;
-      districtCapacity[district].totalEnrollment += school.enrollment;
-    });
-
-    // Calculate new travel times for each district
-    const newTravelTimes = {};
-    
-    Object.entries(districtCapacity).forEach(([district, data]) => {
-      // If district has sufficient capacity, travel time is minimal
-      if (data.availableCapacity > 0) {
-        // Average distance to schools in same district
-        const localSchools = data.schools.filter(s => s.availableSeats > 0);
-        if (localSchools.length > 0) {
-          // Assume 5 min average for local schools with capacity
-          newTravelTimes[district] = 5;
-          return;
-        }
-      }
-
-      // Need to find nearest school with capacity in other districts
-      let minDistance = Infinity;
-      let minTime = Infinity;
-
-      // Get district center (average of school locations)
-      const districtSchools = data.schools;
-      if (districtSchools.length > 0) {
-        const centerLat = districtSchools.reduce((sum, s) => sum + s.coords.lat, 0) / districtSchools.length;
-        const centerLon = districtSchools.reduce((sum, s) => sum + s.coords.lng, 0) / districtSchools.length;
-
-        // Check all schools with available capacity
-        updatedSchools.forEach(school => {
-          const availableSeats = school.capacity - school.enrollment;
-          if (availableSeats > 0) {
-            const coords = extractCoordinates(school);
-            if (coords) {
-              const distance = calculateDistance(centerLat, centerLon, coords.lat, coords.lng);
-              if (distance < minDistance) {
-                minDistance = distance;
-                // Estimate: 3 min per km in urban area
-                minTime = Math.max(5, distance * 3);
-              }
-            }
-          }
-        });
-      }
-
-      newTravelTimes[district] = minTime === Infinity ? 30 : Math.round(minTime);
-    });
-
-    console.log('New Travel Times:', newTravelTimes);
-    setRecalculatedTravelTimes(newTravelTimes);
-    return newTravelTimes;
-  };
-
-  // Recalculate when capacity changes
-  useEffect(() => {
-    if (whatIfMode && Object.keys(capacityChanges).length > 0) {
-      recalculateTravelTimes();
-    } else {
-      setRecalculatedTravelTimes({});
-    }
-  }, [capacityChanges, whatIfMode, allSchools]);
-
-  // Get marker color
   const getMarkerColor = (school) => {
     const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
     const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
@@ -307,7 +158,6 @@ const MapTab = () => {
     return '#22c55e';
   };
 
-  // Filter schools
   const getFilteredSchools = () => {
     return allSchools.filter(school => {
       const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
@@ -334,22 +184,12 @@ const MapTab = () => {
     optimalLayerRef.current.clearLayers();
     heatmapLayerRef.current.clearLayers();
 
-    const activeTravelTimes = whatIfMode && Object.keys(recalculatedTravelTimes).length > 0 
-      ? recalculatedTravelTimes 
-      : {};
-
-    // DISTRICT HEATMAP - with better debugging
+    // DISTRICT HEATMAP
     if (showHeatmap && travelTimeData.length > 0) {
       const districtTravelTime = {};
       
-      console.log('=== PROCESSING DISTRICT HEATMAP ===');
-      console.log('Travel Time Data Length:', travelTimeData.length);
-      
-      travelTimeData.forEach((point, idx) => {
-        // Try multiple field names for district
+      travelTimeData.forEach((point) => {
         const district = point.district || point.from_district || point.district_name || point.name;
-        
-        // Try multiple field names for travel time
         const travelTime = parseFloat(
           point.avg_travel_time_minutes || 
           point.nearest_school_time || 
@@ -358,18 +198,7 @@ const MapTab = () => {
           0
         );
 
-        if (idx < 3) {
-          console.log(`Point ${idx}:`, {
-            district,
-            travelTime,
-            rawPoint: point
-          });
-        }
-
-        if (!district) {
-          console.warn('No district found for point:', point);
-          return;
-        }
+        if (!district) return;
         
         if (!districtTravelTime[district]) {
           districtTravelTime[district] = {
@@ -384,52 +213,41 @@ const MapTab = () => {
         districtTravelTime[district].count += 1;
       });
 
-      console.log('Districts Found:', Object.keys(districtTravelTime).length);
-      console.log('District Stats:', districtTravelTime);
-
       Object.entries(districtTravelTime).forEach(([district, data]) => {
         if (data.count === 0) return;
         
-        // Use recalculated time if in what-if mode
-        const avgTime = whatIfMode && activeTravelTimes[district] 
-          ? activeTravelTimes[district]
-          : data.totalTime / data.count;
-        
-        console.log(`District ${district}: Avg Time = ${avgTime.toFixed(1)} min`);
+        const avgTime = data.totalTime / data.count;
 
-        let centerLat = 0, centerLng = 0, validPoints = 0;
+        let centerLat = 0;
+        let centerLng = 0;
+        let validPoints = 0;
         
         data.points.forEach(point => {
           const coords = extractCoordinates(point);
           if (coords) {
             centerLat += coords.lat;
             centerLng += coords.lng;
-            validPoints++;
+            validPoints += 1;
           }
         });
         
-        if (validPoints === 0) {
-          console.warn(`No valid coordinates for district ${district}`);
-          return;
-        }
+        if (validPoints === 0) return;
         
         centerLat = centerLat / validPoints;
         centerLng = centerLng / validPoints;
         
-        // Color based on travel time - MORE SENSITIVE THRESHOLDS
-        let color, opacity;
-        if (avgTime > 20) {  // Changed from 30 to 20
+        let color;
+        let opacity;
+        if (avgTime > 20) {
           color = '#ef4444';
           opacity = 0.3;
-        } else if (avgTime > 10) {  // Changed from 20 to 10
+        } else if (avgTime > 10) {
           color = '#f97316';
           opacity = 0.25;
         } else {
           color = '#22c55e';
           opacity = 0.2;
         }
-
-        console.log(`District ${district}: Color = ${color}, Time = ${avgTime.toFixed(1)}`);
 
         const circle = L.circle([centerLat, centerLng], {
           radius: 3000,
@@ -440,18 +258,16 @@ const MapTab = () => {
           opacity: 0.5
         });
 
-        const popupContent = `
-          <div style="font-family: Inter, sans-serif; min-width: 200px;">
-            <strong style="font-size: 14px; color: #1f2937;">${district}</strong><br>
+        circle.bindPopup(`
+          <div style="font-family: Inter, sans-serif;">
+            <strong>${district}</strong><br>
             <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
               <strong>Avg Travel Time:</strong> ${avgTime.toFixed(1)} min<br>
-              <strong>Status:</strong> ${avgTime > 20 ? '🔴 High' : avgTime > 10 ? '🟠 Medium' : '🟢 Good'}<br>
-              ${whatIfMode && activeTravelTimes[district] ? '<span style="color: #f59e0b; font-weight: 600;">⚠️ What-If Scenario Active</span>' : ''}
+              <strong>Status:</strong> ${avgTime > 20 ? '🔴 High' : avgTime > 10 ? '🟠 Medium' : '🟢 Good'}
             </div>
           </div>
-        `;
+        `);
 
-        circle.bindPopup(popupContent);
         circle.addTo(heatmapLayerRef.current);
       });
     }
@@ -473,18 +289,18 @@ const MapTab = () => {
 
         marker.bindPopup(`
           <div style="font-family: Inter, sans-serif; min-width: 280px;">
-            <div style="background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%); color: white; padding: 12px; margin: -12px -12px 12px -12px; border-radius: 4px 4px 0 0;">
-              <strong style="font-size: 16px;">📍 Optimal Location ${location.location_id || ''}</strong><br>
-              <span style="font-size: 12px; opacity: 0.9;">${location.recommended_district || ''}</span>
+            <div style="background: #9333ea; color: white; padding: 12px; margin: -12px -12px 12px -12px;">
+              <strong>📍 Optimal Location ${location.location_id || ''}</strong><br>
+              <span style="font-size: 12px;">${location.recommended_district || ''}</span>
             </div>
             
             <div style="background: #f3f4f6; padding: 10px; border-radius: 6px;">
-              <strong style="color: #1f2937;">📊 Quantitative Impact:</strong><br>
-              <div style="margin-top: 6px; font-size: 13px; line-height: 1.6;">
-                <strong>• Students Served:</strong> ${studentsServed.toLocaleString()}<br>
-                <strong>• Capacity:</strong> ${recommendedCapacity.toLocaleString()} seats<br>
+              <strong>📊 Impact:</strong><br>
+              <div style="margin-top: 6px; font-size: 13px;">
+                <strong>• Students:</strong> ${studentsServed.toLocaleString()}<br>
+                <strong>• Capacity:</strong> ${recommendedCapacity.toLocaleString()}<br>
                 <strong>• Districts:</strong> ${districtsServed.length}<br>
-                <strong>• Avg Distance:</strong> ${avgDistance.toFixed(1)} km
+                <strong>• Distance:</strong> ${avgDistance.toFixed(1)} km
               </div>
             </div>
           </div>
@@ -516,18 +332,18 @@ const MapTab = () => {
           fillOpacity: 0.8
         });
 
-        const popupContent = document.createElement('div');
-        popupContent.style.fontFamily = 'Inter, sans-serif';
-        popupContent.style.minWidth = '260px';
+        const popupDiv = document.createElement('div');
+        popupDiv.style.fontFamily = 'Inter, sans-serif';
+        popupDiv.style.minWidth = '260px';
         
-        popupContent.innerHTML = `
-          <div style="background: ${getMarkerColor(school)}; color: white; padding: 10px; margin: -12px -12px 12px -12px; border-radius: 4px 4px 0 0;">
+        popupDiv.innerHTML = `
+          <div style="background: ${getMarkerColor(school)}; color: white; padding: 10px; margin: -12px -12px 12px -12px;">
             <strong>${school.school_name || school.name || 'School'}</strong><br>
-            <span style="font-size: 11px; opacity: 0.9;">${school.district || school.district_name || ''}</span>
+            <span style="font-size: 11px;">${school.district || school.district_name || ''}</span>
           </div>
           
           ${whatIfMode ? `
-            <div style="background: #fef3c7; padding: 8px; margin-bottom: 10px; border-radius: 4px;">
+            <div style="background: #fef3c7; padding: 8px; margin-bottom: 10px;">
               <strong style="color: #92400e; font-size: 12px;">🔧 What-If Mode</strong>
             </div>
             <div style="margin-bottom: 10px;">
@@ -543,7 +359,7 @@ const MapTab = () => {
                 id="update-btn-${school.id}"
                 style="margin-top: 6px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"
               >
-                Update & Recalculate
+                Update Capacity
               </button>
               ${adjustedCapacity !== originalCapacity ? `
                 <button 
@@ -560,22 +376,21 @@ const MapTab = () => {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
               <div>
                 <strong>Capacity:</strong><br>
-                <span style="font-size: 14px; font-weight: 600;">${adjustedCapacity.toLocaleString()}</span>
-                ${adjustedCapacity !== originalCapacity ? `<br><span style="color: #3b82f6; font-size: 10px;">(was ${originalCapacity})</span>` : ''}
+                <span style="font-size: 14px;">${adjustedCapacity.toLocaleString()}</span>
               </div>
               <div>
                 <strong>Enrollment:</strong><br>
-                <span style="font-size: 14px; font-weight: 600;">${enrollment.toLocaleString()}</span>
+                <span style="font-size: 14px;">${enrollment.toLocaleString()}</span>
               </div>
               <div>
                 <strong>Utilization:</strong><br>
-                <span style="color: ${utilization >= 100 ? '#dc2626' : '#22c55e'}; font-size: 14px; font-weight: 600;">${utilization}%</span>
+                <span style="font-size: 14px;">${utilization}%</span>
               </div>
             </div>
           </div>
         `;
 
-        marker.bindPopup(popupContent);
+        marker.bindPopup(popupDiv);
 
         if (whatIfMode) {
           marker.on('popupopen', () => {
@@ -583,7 +398,7 @@ const MapTab = () => {
             const resetBtn = document.getElementById(`reset-btn-${school.id}`);
             const input = document.getElementById(`capacity-input-${school.id}`);
 
-            if (updateBtn) {
+            if (updateBtn && input) {
               updateBtn.addEventListener('click', () => {
                 const newCapacity = parseInt(input.value);
                 if (!isNaN(newCapacity) && newCapacity >= 0) {
@@ -610,14 +425,14 @@ const MapTab = () => {
         marker.addTo(schoolsLayerRef.current);
       });
     }
-  }, [allSchools, optimalLocations, travelTimeData, showSchools, showOptimal, showHeatmap, filters, whatIfMode, capacityChanges, recalculatedTravelTimes, loading]);
+  }, [allSchools, optimalLocations, travelTimeData, showSchools, showOptimal, showHeatmap, filters, whatIfMode, capacityChanges, loading]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading map data...</p>
+          <p className="text-gray-600 dark:text-gray-400">Loading map data...</p>
         </div>
       </div>
     );
@@ -625,13 +440,10 @@ const MapTab = () => {
 
   return (
     <div className="flex h-screen">
-      {/* Main Map Container - Takes most of the space */}
       <div className="flex-1 relative">
         <div ref={mapRef} className="absolute inset-0"></div>
 
-        {/* Controls - Top Right of Map */}
         <div className="absolute top-4 right-4 z-10 space-y-2">
-          {/* Layer Toggles */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm text-gray-900 dark:text-white mb-2">Layers</h3>
             
@@ -640,10 +452,10 @@ const MapTab = () => {
                 type="checkbox"
                 checked={showSchools}
                 onChange={(e) => setShowSchools(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                className="w-4 h-4"
               />
               <Eye size={16} className={showSchools ? 'text-blue-600' : 'text-gray-400'} />
-              <span className="text-sm">Schools</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Schools</span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -651,10 +463,10 @@ const MapTab = () => {
                 type="checkbox"
                 checked={showOptimal}
                 onChange={(e) => setShowOptimal(e.target.checked)}
-                className="w-4 h-4 text-purple-600 rounded"
+                className="w-4 h-4"
               />
               <Eye size={16} className={showOptimal ? 'text-purple-600' : 'text-gray-400'} />
-              <span className="text-sm">Optimal</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Optimal</span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -662,14 +474,13 @@ const MapTab = () => {
                 type="checkbox"
                 checked={showHeatmap}
                 onChange={(e) => setShowHeatmap(e.target.checked)}
-                className="w-4 h-4 text-green-600 rounded"
+                className="w-4 h-4"
               />
               <Eye size={16} className={showHeatmap ? 'text-green-600' : 'text-gray-400'} />
-              <span className="text-sm">Heatmap</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Heatmap</span>
             </label>
           </div>
 
-          {/* What-If Toggle */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -679,66 +490,55 @@ const MapTab = () => {
                   setWhatIfMode(e.target.checked);
                   if (!e.target.checked) setCapacityChanges({});
                 }}
-                className="w-4 h-4 text-orange-600 rounded"
+                className="w-4 h-4"
               />
               <Edit3 size={16} className={whatIfMode ? 'text-orange-600' : 'text-gray-400'} />
-              <span className="text-sm font-semibold">What-If</span>
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">What-If</span>
             </label>
             {whatIfMode && Object.keys(capacityChanges).length > 0 && (
               <button
                 onClick={() => setCapacityChanges({})}
-                className="mt-2 flex items-center space-x-1 text-xs text-blue-600"
+                className="mt-2 flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700"
               >
                 <RotateCcw size={12} />
-                <span>Reset</span>
+                <span>Reset All</span>
               </button>
             )}
           </div>
 
-          {/* Filters Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 flex items-center justify-between"
+            className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             <div className="flex items-center space-x-2">
-              <Filter size={16} />
-              <span className="text-sm font-semibold">Filters</span>
+              <Filter size={16} className="text-gray-600 dark:text-gray-400" />
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Filters</span>
             </div>
-            <span className="text-xs">{showFilters ? '▼' : '▶'}</span>
+            <span className="text-xs text-gray-500">{showFilters ? '▼' : '▶'}</span>
           </button>
 
           {showFilters && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-3 max-w-xs">
               <div>
-                <label className="text-xs font-semibold block mb-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-2">
                   Utilization: {filters.utilizationMin}%-{filters.utilizationMax}%
                 </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="range"
-                    min="0"
-                    max="200"
-                    value={filters.utilizationMin}
-                    onChange={(e) => setFilters({...filters, utilizationMin: parseInt(e.target.value)})}
-                    className="w-full"
-                  />
-                  <input
-                    type="range"
-                    min="0"
-                    max="200"
-                    value={filters.utilizationMax}
-                    onChange={(e) => setFilters({...filters, utilizationMax: parseInt(e.target.value)})}
-                    className="w-full"
-                  />
-                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="200"
+                  value={filters.utilizationMin}
+                  onChange={(e) => setFilters({...filters, utilizationMin: parseInt(e.target.value)})}
+                  className="w-full"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-semibold block mb-1">Type</label>
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">Type</label>
                 <select
                   value={filters.schoolType}
                   onChange={(e) => setFilters({...filters, schoolType: e.target.value})}
-                  className="w-full p-2 text-sm border rounded"
+                  className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
                 >
                   <option value="all">All</option>
                   <option value="Elementary">Elementary</option>
@@ -758,55 +558,53 @@ const MapTab = () => {
                   showNearCapacity: true,
                   showAcceptable: true,
                 })}
-                className="w-full bg-gray-200 hover:bg-gray-300 py-2 px-3 rounded text-sm"
+                className="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 py-2 px-3 rounded text-sm"
               >
-                Reset
+                Reset Filters
               </button>
             </div>
           )}
         </div>
 
-        {/* Stats - Top Left */}
         <div className="absolute top-4 left-4 z-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3">
           <div className="grid grid-cols-3 gap-3 text-center text-sm">
             <div>
               <p className="text-xl font-bold text-blue-600">{allSchools.length}</p>
-              <p className="text-xs text-gray-600">Schools</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Schools</p>
             </div>
             <div>
               <p className="text-xl font-bold text-purple-600">{optimalLocations.length}</p>
-              <p className="text-xs text-gray-600">Optimal</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Optimal</p>
             </div>
             <div>
               <p className="text-xl font-bold text-green-600">{travelTimeData.length}</p>
-              <p className="text-xs text-gray-600">Districts</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Districts</p>
             </div>
           </div>
         </div>
 
-        {/* Legend - Bottom Left */}
         <div className="absolute bottom-4 left-4 z-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 max-w-xs">
-          <h3 className="font-semibold text-xs mb-2">Legend</h3>
+          <h3 className="font-semibold text-xs text-gray-900 dark:text-white mb-2">Legend</h3>
           
           {showSchools && (
             <div className="mb-3">
-              <p className="text-xs font-semibold text-gray-600 mb-1">Schools</p>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Schools</p>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                  <span>Critical (≥120%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Critical (≥120%)</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span>Over (100-119%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Over (100-119%)</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                  <span>Near (85-99%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">Near (85-99%)</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span>OK (&lt;85%)</span>
+                  <span className="text-gray-700 dark:text-gray-300">OK (&lt;85%)</span>
                 </div>
               </div>
             </div>
@@ -814,40 +612,26 @@ const MapTab = () => {
 
           {showHeatmap && (
             <div>
-              <p className="text-xs font-semibold text-gray-600 mb-1">Travel Time</p>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Travel Time</p>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-green-500 opacity-30"></div>
-                  <span>&lt;10 min</span>
+                  <span className="text-gray-700 dark:text-gray-300">&lt;10 min</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-orange-500 opacity-30"></div>
-                  <span>10-20 min</span>
+                  <span className="text-gray-700 dark:text-gray-300">10-20 min</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-3 h-3 rounded-full bg-red-500 opacity-30"></div>
-                  <span>&gt;20 min</span>
+                  <span className="text-gray-700 dark:text-gray-300">&gt;20 min</span>
                 </div>
               </div>
             </div>
           )}
         </div>
-
-        {/* Debug Info */}
-        {debugInfo && (
-          <div className="absolute top-20 right-4 z-10 bg-yellow-100 border border-yellow-400 rounded-lg shadow-lg p-3 max-w-sm text-xs">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-yellow-800 mb-1">Debug Info</p>
-                <pre className="whitespace-pre-wrap text-yellow-900 text-xs">{debugInfo}</pre>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Right Sidebar - AI Insights */}
       <div className="w-96 bg-gray-50 dark:bg-gray-900 p-4 space-y-4 overflow-y-auto">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">AI Insights</h2>
         
@@ -870,7 +654,7 @@ const MapTab = () => {
         )}
 
         {!optimalApiData?.ai_insights && !travelApiData?.ai_insights && (
-          <div className="text-center text-gray-500 text-sm py-8">
+          <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-8">
             <Info size={32} className="mx-auto mb-2 opacity-50" />
             <p>Enable layers to see AI insights</p>
           </div>
@@ -881,6 +665,12 @@ const MapTab = () => {
 };
 
 export default MapTab;
+
+
+
+
+
+
 
 
 
