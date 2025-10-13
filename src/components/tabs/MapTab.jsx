@@ -55,14 +55,21 @@ const MapTab = () => {
     fetchData();
   }, []);
 
-  // Initialize map
+  // Initialize map - runs after loading is complete
   useEffect(() => {
     console.log('Map initialization effect running');
+    console.log('loading:', loading);
     console.log('mapRef.current:', mapRef.current);
     console.log('mapInstanceRef.current:', mapInstanceRef.current);
 
+    // Wait for loading to complete and map div to be available
+    if (loading) {
+      console.log('Still loading, waiting...');
+      return;
+    }
+
     if (!mapRef.current) {
-      console.log('No mapRef.current, skipping');
+      console.log('No mapRef.current, waiting for next render...');
       return;
     }
 
@@ -102,7 +109,7 @@ const MapTab = () => {
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [loading]);
 
   // Add markers
   useEffect(() => {
@@ -188,20 +195,33 @@ const MapTab = () => {
           Loading: {loading ? 'Yes' : 'No'} | Schools: {allSchools.length}
         </p>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-96 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading map data...</p>
-            </div>
-          </div>
-        ) : (
+        <div style={{ position: 'relative' }}>
           <div 
             ref={mapRef} 
             style={{ height: '600px', width: '100%' }}
             className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900"
           />
-        )}
+          {loading && (
+            <div style={{ 
+              position: 'absolute', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              backgroundColor: 'rgba(255,255,255,0.95)',
+              borderRadius: '0.5rem',
+              zIndex: 1000 
+            }}>
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600 dark:text-gray-400">Loading map data...</p>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
