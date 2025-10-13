@@ -38,7 +38,7 @@ const OverviewTab = () => {
   const summary = capacityData?.summary || {};
   const overcapacitySchools = capacityData?.overcapacity_schools || [];
   const priorities = districtData?.district_priorities || [];
-  const topPriorities = priorities.slice(0, 5);
+  const topPriorities = priorities.slice(0, 6);
 
   // Calculate total students from overcapacity schools
   const totalStudents = overcapacitySchools.reduce((sum, school) => sum + (school.enrollment || 0), 0);
@@ -108,10 +108,10 @@ const OverviewTab = () => {
         </div>
       </section>
 
-      {/* Top 5 Priority Districts */}
+      {/* Top 6 Priority Districts */}
       <section>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          Top 5 Priority Districts
+          Top 6 Priority Districts
         </h2>
         {topPriorities.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -130,7 +130,7 @@ const OverviewTab = () => {
                   <span className={`
                     px-3 py-1 rounded-full text-xs font-semibold
                     ${district.priority_tier === 'Critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' : ''}
-                    ${district.priority_tier === 'High' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' : ''}
+                    ${district.priority_tier === 'HIGH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' : ''}
                     ${district.priority_tier === 'Medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : ''}
                   `}>
                     {district.priority_tier}
@@ -149,15 +149,15 @@ const OverviewTab = () => {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Schools:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Overcapacity Schools:</span>
                     <span className="font-semibold text-gray-900 dark:text-white">
-                      {district.school_count || 0}
+                      {district.metrics?.num_overcapacity_schools || 0}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Current Deficit:</span>
                     <span className="font-semibold text-red-600 dark:text-red-400">
-                      {district.current_deficit?.toLocaleString() || 0}
+                      {district.metrics?.total_current_deficit?.toLocaleString() || 0}
                     </span>
                   </div>
                 </div>
