@@ -28,9 +28,9 @@ const MapTab = () => {
       setLoading(true);
       try {
         const [capacityRes, optimalRes, travelRes] = await Promise.all([
-          fetch('https://n8n.hantoush.space/webhook/3d4f2de1-22fc-4e9e-abb9-8fc73a046df5'),
-          fetch('https://n8n.hantoush.space/webhook/8bfc0a11-ee54-4f36-9c1a-b7fba1c9d71e'),
-          fetch('https://n8n.hantoush.space/webhook/d11e24e0-3a86-4b19-b4b5-4e6dfb8e2af6')
+          fetch('https://n8n.hantoush.space/webhook/school-analysis', { method: 'POST' }),
+          fetch('https://n8n.hantoush.space/webhook/find-optimal-locations', { method: 'POST' }),
+          fetch('https://n8n.hantoush.space/webhook/travel-time-heatmap', { method: 'POST' })
         ]);
 
         const capacity = await capacityRes.json();
