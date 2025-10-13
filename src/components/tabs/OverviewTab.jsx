@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { School, Users, AlertTriangle, TrendingUp, MapPin } from 'lucide-react';
+import { School, Users, AlertTriangle, TrendingUp, MapPin, TrendingDown, Clock, UserPlus, Target } from 'lucide-react';
 import KPICard from '../shared/KPICard';
 import AIInsightsPanel from '../shared/AIInsightsPanel';
 import LoadingSpinner from '../shared/LoadingSpinner';
@@ -114,52 +114,142 @@ const OverviewTab = () => {
           Top 6 Priority Districts
         </h2>
         {topPriorities.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {topPriorities.map((district, index) => (
               <div
                 key={district.district}
-                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-5 hover:shadow-lg transition-shadow"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-xl transition-shadow"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
-                      <MapPin className="text-blue-600 dark:text-blue-400" size={20} />
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
+                      <MapPin className="text-blue-600 dark:text-blue-400" size={24} />
                     </div>
-                    <span className="text-2xl font-bold text-gray-400">#{index + 1}</span>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-3xl font-bold text-gray-400">#{index + 1}</span>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                          {district.district}
+                        </h3>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Population: {district.metrics?.population?.toLocaleString() || 'N/A'}
+                      </p>
+                    </div>
                   </div>
                   <span className={`
-                    px-3 py-1 rounded-full text-xs font-semibold
-                    ${district.priority_tier === 'Critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' : ''}
-                    ${district.priority_tier === 'HIGH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' : ''}
-                    ${district.priority_tier === 'Medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : ''}
+                    px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap
+                    ${district.priority_tier === 'Critical' || district.priority_tier === 'CRITICAL' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' : ''}
+                    ${district.priority_tier === 'High' || district.priority_tier === 'HIGH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' : ''}
+                    ${district.priority_tier === 'Medium' || district.priority_tier === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : ''}
+                    ${district.priority_tier === 'Low' || district.priority_tier === 'LOW' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : ''}
                   `}>
                     {district.priority_tier}
                   </span>
                 </div>
-                
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                  {district.district}
-                </h3>
-                
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Priority Score:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {district.priority_score?.toFixed(1) || 'N/A'}
-                    </span>
+
+                {/* Priority Score - Prominent */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Priority Score</span>
+                    <div className="flex items-center space-x-2">
+                      <Target className="text-blue-600 dark:text-blue-400" size={20} />
+                      <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                        {district.priority_score?.toFixed(1) || 'N/A'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Overcapacity Schools:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
+                </div>
+
+                {/* Key Metrics Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <School className="text-gray-600 dark:text-gray-400" size={16} />
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Overcapacity Schools</span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
                       {district.metrics?.num_overcapacity_schools || 0}
-                    </span>
+                    </p>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Current Deficit:</span>
-                    <span className="font-semibold text-red-600 dark:text-red-400">
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <AlertTriangle className="text-red-600 dark:text-red-400" size={16} />
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Current Deficit</span>
+                    </div>
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                       {district.metrics?.total_current_deficit?.toLocaleString() || 0}
-                    </span>
+                    </p>
                   </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <TrendingUp className="text-orange-600 dark:text-orange-400" size={16} />
+                      <span className="text-xs text-gray-600 dark:text-gray-400">2030 Forecast Gap</span>
+                    </div>
+                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {district.metrics?.total_forecast_gap_2030?.toLocaleString() || 0}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <Clock className="text-purple-600 dark:text-purple-400" size={16} />
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Avg Travel Time</span>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {district.metrics?.avg_travel_time_minutes?.toFixed(1) || 0} min
+                    </p>
+                  </div>
+                </div>
+
+                {/* Component Scores */}
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Component Scores</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 dark:text-gray-400">Current Overcapacity:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {district.component_scores?.current_overcapacity?.toFixed(1) || 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 dark:text-gray-400">Forecast Growth:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {district.component_scores?.forecast_growth?.toFixed(1) || 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 dark:text-gray-400">Travel Accessibility:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {district.component_scores?.travel_accessibility?.toFixed(1) || 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 dark:text-gray-400">Population Impact:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {district.component_scores?.population_impact || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Investment Rationale */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center">
+                    <TrendingDown className="mr-2 text-green-600 dark:text-green-400" size={16} />
+                    Investment Rationale
+                  </h4>
+                  <ul className="space-y-1">
+                    {district.investment_rationale?.slice(0, 3).map((reason, idx) => (
+                      <li key={idx} className="text-xs text-gray-700 dark:text-gray-300 flex items-start">
+                        <span className="text-green-600 dark:text-green-400 mr-2 mt-0.5">•</span>
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             ))}
