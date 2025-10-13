@@ -7,9 +7,21 @@ const AIInsightsPanel = ({ insights, title = "AI Strategic Insights" }) => {
   }
 
   const formatContent = (content) => {
+    // Handle different data types
     if (!content) return null;
     
-    return content.split('\n').map((line, i) => {
+    // Convert to string if it's not already
+    let textContent = content;
+    if (typeof content !== 'string') {
+      try {
+        textContent = JSON.stringify(content, null, 2);
+      } catch (e) {
+        textContent = String(content);
+      }
+    }
+    
+    // Split by newlines and format
+    return textContent.split('\n').map((line, i) => {
       const trimmed = line.trim();
       if (!trimmed) return null;
 
