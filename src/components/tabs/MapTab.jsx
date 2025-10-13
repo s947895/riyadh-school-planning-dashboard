@@ -1,9 +1,15 @@
+// ============================================
+// MapTab.jsx - PART 1 of 3
+// To reconstruct: Concatenate Part1 + Part2 + Part3
+// ============================================
+
 import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Filter, Eye, EyeOff } from 'lucide-react';
+import { Filter, Eye, EyeOff, Edit3, RotateCcw, Info } from 'lucide-react';
+import AIInsightsPanel from '../shared/AIInsightsPanel';
 
-// Fix for default marker icons in Leaflet
+// Fix for default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -11,7 +17,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Create custom icon for optimal locations
+// Custom icon for optimal locations (diamond shape)
 const createStarIcon = (color) => {
   return L.divIcon({
     className: 'custom-star-icon',
@@ -30,15 +36,20 @@ const createStarIcon = (color) => {
 };
 
 const MapTab = () => {
+  // Refs for map and layers
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const schoolsLayerRef = useRef(null);
   const optimalLayerRef = useRef(null);
   const heatmapLayerRef = useRef(null);
   
+  // Data state
   const [allSchools, setAllSchools] = useState([]);
   const [optimalLocations, setOptimalLocations] = useState([]);
   const [travelTimeData, setTravelTimeData] = useState([]);
+  const [capacityApiData, setCapacityApiData] = useState(null);
+  const [optimalApiData, setOptimalApiData] = useState(null);
+  const [travelApiData, setTravelApiData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Layer visibility
@@ -57,10 +68,14 @@ const MapTab = () => {
     showNearCapacity: true,
     showAcceptable: true,
   });
-
   const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch all data
+  // What-if analysis state
+  const [whatIfMode, setWhatIfMode] = useState(false);
+  const [capacityChanges, setCapacityChanges] = useState({});
+  const [districtImpact, setDistrictImpact] = useState({});
+
+  // Fetch all data on mount
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -79,12 +94,19 @@ const MapTab = () => {
         console.log('Optimal Locations:', optimal);
         console.log('Travel Time Data:', travel);
 
-        // Use all schools if available, otherwise use overcapacity schools
-        setAllSchools(capacity.all_schools || capacity.overcapacity_schools || []);
-        setOptimalLocations(optimal.recommendations || []);
-        setTravelTimeData(travel.heatmap_data || []);
+        // Extract schools from API response
+        const schools = capacity.overcapacity_schools || capacity.results?.schools || [];
+        const optimalLocs = optimal.recommendations || optimal.results?.optimal_locations || [];
+        const travelData = travel.district_analysis || travel.heatmap_data || travel.results?.heatmap_data || [];
+
+        setAllSchools(schools);
+        setOptimalLocations(optimalLocs);
+        setTravelTimeData(travelData);
+        setCapacityApiData(capacity);
+        setOptimalApiData(optimal);
+        setTravelApiData(travel);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error loading map data:', error);
       } finally {
         setLoading(false);
       }
@@ -93,12 +115,11 @@ const MapTab = () => {
     fetchData();
   }, []);
 
-  // Initialize map - runs after loading is complete
+  // Initialize map
   useEffect(() => {
-    if (loading || !mapRef.current || mapInstanceRef.current) return;
+    if (loading || mapInstanceRef.current) return;
 
-    const riyadhCenter = [24.7136, 46.6753];
-    const map = L.map(mapRef.current).setView(riyadhCenter, 11);
+    const map = L.map(mapRef.current).setView([24.7136, 46.6753], 11);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
@@ -106,7 +127,6 @@ const MapTab = () => {
       maxZoom: 20
     }).addTo(map);
 
-    // Create layer groups
     schoolsLayerRef.current = L.layerGroup().addTo(map);
     optimalLayerRef.current = L.layerGroup().addTo(map);
     heatmapLayerRef.current = L.layerGroup().addTo(map);
@@ -121,7 +141,7 @@ const MapTab = () => {
     };
   }, [loading]);
 
-  // Helper function to extract coordinates
+  // Helper: Extract coordinates from various field names
   const extractCoordinates = (item) => {
     const latFields = ['latitude', 'lat', 'Latitude', 'LAT', 'y'];
     const lngFields = ['longitude', 'lng', 'lon', 'Longitude', 'LONGITUDE', 'LON', 'x'];
@@ -144,6 +164,7 @@ const MapTab = () => {
     }
 
     if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+      // Validate coordinates are within Riyadh bounds
       if (lat >= 24 && lat <= 25 && lng >= 46 && lng <= 47) {
         return { lat, lng };
       }
@@ -151,6 +172,109 @@ const MapTab = () => {
 
     return null;
   };
+
+  // Helper: Calculate district-level impact for what-if analysis
+  const calculateDistrictImpact = () => {
+    const districtStats = {};
+    
+    allSchools.forEach(school => {
+      const district = school.district || school.district_name || 'Unknown';
+      if (!districtStats[district]) {
+        districtStats[district] = {
+          totalCapacity: 0,
+          totalEnrollment: 0,
+          schoolCount: 0,
+          overcrowded: 0,
+          originalCapacity: 0,
+          capacityChange: 0
+        };
+      }
+      
+      const originalCapacity = parseInt(school.capacity || school.design_capacity || 0);
+      const adjustedCapacity = parseInt(capacityChanges[school.id] || originalCapacity);
+      const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
+      
+      districtStats[district].totalCapacity += adjustedCapacity;
+      districtStats[district].totalEnrollment += enrollment;
+      districtStats[district].originalCapacity += originalCapacity;
+      districtStats[district].capacityChange += (adjustedCapacity - originalCapacity);
+      districtStats[district].schoolCount += 1;
+      
+      if (enrollment > adjustedCapacity) {
+        districtStats[district].overcrowded += 1;
+      }
+    });
+    
+    // Calculate utilization percentages
+    Object.keys(districtStats).forEach(district => {
+      const stats = districtStats[district];
+      stats.utilization = stats.totalCapacity > 0 
+        ? Math.round((stats.totalEnrollment / stats.totalCapacity) * 100) 
+        : 0;
+      stats.deficit = Math.max(0, stats.totalEnrollment - stats.totalCapacity);
+    });
+    
+    setDistrictImpact(districtStats);
+    return districtStats;
+  };
+
+  // Recalculate district impact when capacity changes
+  useEffect(() => {
+    if (whatIfMode) {
+      calculateDistrictImpact();
+    }
+  }, [capacityChanges, whatIfMode, allSchools]);
+
+  // Helper: Get marker color based on utilization
+  const getMarkerColor = (school) => {
+    const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
+    const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
+    const utilization = capacity > 0 ? (enrollment / capacity) * 100 : 0;
+
+    if (utilization >= 120) return '#dc2626'; // Critical red
+    if (utilization >= 100) return '#f97316'; // Over capacity orange
+    if (utilization >= 85) return '#fbbf24';  // Near capacity yellow
+    return '#22c55e';  // Acceptable green
+  };
+
+  // Helper: Filter schools based on current filters
+  const getFilteredSchools = () => {
+    return allSchools.filter(school => {
+      const capacity = parseInt(capacityChanges[school.id] || school.capacity || school.design_capacity || 0);
+      const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
+      const utilization = capacity > 0 ? (enrollment / capacity) * 100 : 0;
+
+      // Utilization filter
+      if (utilization < filters.utilizationMin || utilization > filters.utilizationMax) {
+        return false;
+      }
+
+      // School type filter
+      if (filters.schoolType !== 'all' && school.school_type !== filters.schoolType) {
+        return false;
+      }
+
+      // Gender filter
+      if (filters.gender !== 'all' && school.gender !== filters.gender) {
+        return false;
+      }
+
+      // Category filters
+      if (utilization >= 120 && !filters.showCritical) return false;
+      if (utilization >= 100 && utilization < 120 && !filters.showOverCapacity) return false;
+      if (utilization >= 85 && utilization < 100 && !filters.showNearCapacity) return false;
+      if (utilization < 85 && !filters.showAcceptable) return false;
+
+      return true;
+    });
+  };
+
+// END OF PART 1
+// Continue with Part 2 for marker rendering and map updates
+// ============================================
+// MapTab.jsx - PART 2 of 3
+// This is the continuation of Part 1
+// ============================================
 
   // Update markers when data, filters, or visibility changes
   useEffect(() => {
@@ -161,148 +285,109 @@ const MapTab = () => {
     optimalLayerRef.current.clearLayers();
     heatmapLayerRef.current.clearLayers();
 
-    // 1. Add district heatmap (bottom layer)
+    const districtStats = whatIfMode ? calculateDistrictImpact() : {};
+
+    // ===== FIX #1: DISTRICT HEATMAP - Show ALL districts =====
     if (showHeatmap && travelTimeData.length > 0) {
-      const districtGroups = {};
+      // Group travel time data by district
+      const districtTravelTime = {};
       
       travelTimeData.forEach((point) => {
-        const district = point.from_district || point.district_name;
-        if (!districtGroups[district]) {
-          districtGroups[district] = {
+        const district = point.district || point.from_district || point.district_name;
+        if (!district) return;
+        
+        if (!districtTravelTime[district]) {
+          districtTravelTime[district] = {
             points: [],
-            avgTravelTime: 0
+            totalTime: 0,
+            count: 0
           };
         }
-        districtGroups[district].points.push(point);
+        
+        const travelTime = parseFloat(point.avg_travel_time_minutes || point.nearest_school_time || 0);
+        districtTravelTime[district].points.push(point);
+        districtTravelTime[district].totalTime += travelTime;
+        districtTravelTime[district].count += 1;
       });
 
-      Object.entries(districtGroups).forEach(([district, data]) => {
-        const avgTime = data.points.reduce((sum, p) => sum + parseFloat(p.avg_travel_time_minutes || 0), 0) / data.points.length;
+      // Create circles for EACH district
+      Object.entries(districtTravelTime).forEach(([district, data]) => {
+        if (data.count === 0) return;
         
-        // Get district center (use first point as approximation)
-        const firstPoint = data.points[0];
-        const coords = extractCoordinates(firstPoint);
+        const avgTime = data.totalTime / data.count;
         
-        if (coords) {
-          let color, opacity;
-          if (avgTime > 30) {
-            color = '#ef4444';
-            opacity = 0.25;
-          } else if (avgTime > 20) {
-            color = '#f97316';
-            opacity = 0.2;
-          } else {
-            color = '#22c55e';
-            opacity = 0.15;
+        // Find district center (average of all points or use first point)
+        let centerLat = 0, centerLng = 0, validPoints = 0;
+        
+        data.points.forEach(point => {
+          const coords = extractCoordinates(point);
+          if (coords) {
+            centerLat += coords.lat;
+            centerLng += coords.lng;
+            validPoints++;
           }
-
-          // Create a circle to represent district
-          const circle = L.circle([coords.lat, coords.lng], {
-            radius: 3000, // 3km radius
-            fillColor: color,
-            fillOpacity: opacity,
-            color: color,
-            weight: 1,
-            opacity: 0.4
-          });
-
-          circle.bindPopup(`
-            <div style="font-family: Inter, sans-serif;">
-              <strong style="font-size: 14px; color: #1f2937;">${district}</strong><br>
-              <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-                <strong>Avg Travel Time:</strong> ${avgTime.toFixed(1)} min<br>
-                <strong>Status:</strong> ${avgTime > 30 ? '🔴 High' : avgTime > 20 ? '🟠 Medium' : '🟢 Good'}
-              </div>
-            </div>
-          `);
-
-          circle.addTo(heatmapLayerRef.current);
-        }
-      });
-    }
-
-    // 2. Add school markers
-    if (showSchools && allSchools.length > 0) {
-      let addedSchools = 0;
-      
-      allSchools.forEach((school) => {
-        const coords = extractCoordinates(school);
-        if (!coords) return;
-
-        const utilization = parseFloat(school.utilization || school.utilization_rate || 0);
-        const schoolType = school.type || school.school_type || '';
-        const gender = school.gender || '';
-
-        // Apply filters
-        if (utilization < filters.utilizationMin || utilization > filters.utilizationMax) return;
-        if (filters.schoolType !== 'all' && schoolType !== filters.schoolType) return;
-        if (filters.gender !== 'all' && gender !== filters.gender) return;
-
-        // Category filters
-        if (utilization > 120 && !filters.showCritical) return;
-        if (utilization > 100 && utilization <= 120 && !filters.showOverCapacity) return;
-        if (utilization > 85 && utilization <= 100 && !filters.showNearCapacity) return;
-        if (utilization <= 85 && !filters.showAcceptable) return;
-
-        // Determine color and size
-        let color, radius;
-        if (utilization > 120) {
-          color = '#dc2626';
-          radius = 10;
-        } else if (utilization > 100) {
-          color = '#f97316';
-          radius = 9;
-        } else if (utilization > 85) {
-          color = '#eab308';
-          radius = 8;
+        });
+        
+        if (validPoints === 0) return;
+        
+        centerLat = centerLat / validPoints;
+        centerLng = centerLng / validPoints;
+        
+        // Color based on travel time
+        let color, opacity;
+        if (avgTime > 30) {
+          color = '#ef4444'; // Red
+          opacity = 0.25;
+        } else if (avgTime > 20) {
+          color = '#f97316'; // Orange
+          opacity = 0.2;
         } else {
-          color = '#22c55e';
-          radius = 7;
+          color = '#22c55e'; // Green
+          opacity = 0.15;
         }
 
-        const marker = L.circleMarker([coords.lat, coords.lng], {
-          radius: radius,
+        const circle = L.circle([centerLat, centerLng], {
+          radius: 3000, // 3km radius
           fillColor: color,
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.8
+          fillOpacity: opacity,
+          color: color,
+          weight: 1,
+          opacity: 0.4
         });
 
-        const name = school.name || school.school_name || 'Unknown';
-        const district = school.district || school.district_name || 'N/A';
-        const capacity = school.capacity || 'N/A';
-        const enrollment = school.enrollment || school.current_enrollment || 'N/A';
-        const gap = enrollment - capacity;
-
-        marker.bindPopup(`
-          <div style="font-family: Inter, sans-serif; min-width: 200px;">
-            <strong style="font-size: 15px; color: #1f2937;">${name}</strong><br>
+        // Popup with district stats
+        const stats = districtStats[district] || {};
+        const utilizationInfo = whatIfMode && stats.totalCapacity 
+          ? `
             <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-              <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px; font-size: 13px;">
-                <strong>📍 District:</strong> <span>${district}</span>
-                <strong>🏫 Type:</strong> <span>${schoolType}</span>
-                <strong>👥 Gender:</strong> <span>${gender}</span>
-                <strong>📊 Capacity:</strong> <span>${capacity}</span>
-                <strong>👨‍🎓 Enrolled:</strong> <span>${enrollment}</span>
-                <strong>📈 Utilization:</strong> <span style="color: ${color}; font-weight: bold;">${utilization.toFixed(1)}%</span>
-                <strong>⚠️ Gap:</strong> <span style="color: ${gap > 0 ? '#dc2626' : '#22c55e'}; font-weight: bold;">${gap > 0 ? '+' : ''}${gap}</span>
-              </div>
+              <strong>District Capacity:</strong><br>
+              Schools: ${stats.schoolCount}<br>
+              Total Capacity: ${stats.totalCapacity.toLocaleString()}<br>
+              Total Enrollment: ${stats.totalEnrollment.toLocaleString()}<br>
+              Utilization: ${stats.utilization}%<br>
+              Deficit: ${stats.deficit.toLocaleString()} students<br>
+              ${stats.capacityChange !== 0 ? `<strong style="color: ${stats.capacityChange > 0 ? '#22c55e' : '#ef4444'};">Capacity Change: ${stats.capacityChange > 0 ? '+' : ''}${stats.capacityChange}</strong>` : ''}
             </div>
+          `
+          : '';
+
+        circle.bindPopup(`
+          <div style="font-family: Inter, sans-serif;">
+            <strong style="font-size: 14px; color: #1f2937;">${district}</strong><br>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              <strong>Avg Travel Time:</strong> ${avgTime.toFixed(1)} min<br>
+              <strong>Status:</strong> ${avgTime > 30 ? '🔴 High' : avgTime > 20 ? '🟠 Medium' : '🟢 Good'}
+            </div>
+            ${utilizationInfo}
           </div>
         `);
 
-        marker.addTo(schoolsLayerRef.current);
-        addedSchools++;
+        circle.addTo(heatmapLayerRef.current);
       });
-
-      console.log(`Added ${addedSchools} school markers`);
     }
 
-    // 3. Add optimal location markers (top layer)
+    // ===== FIX #2: OPTIMAL LOCATIONS - Add quantitative impact =====
     if (showOptimal && optimalLocations.length > 0) {
-      let addedOptimal = 0;
-
       optimalLocations.forEach((location) => {
         const coords = extractCoordinates(location);
         if (!coords) return;
@@ -311,131 +396,334 @@ const MapTab = () => {
           icon: createStarIcon('#9333ea')
         });
 
-        const schoolType = location.school_type || 'Elementary';
-        const gender = location.gender || 'Boys';
-        const maxTravel = location.max_acceptable_travel_time_from_district_center || 'N/A';
-        const methodology = location.methodology || 'K-means clustering';
+        // Enhanced popup with quantitative metrics
+        const studentsServed = location.estimated_students_served || 0;
+        const recommendedCapacity = location.recommended_capacity || 800;
+        const districtsServed = location.districts_served || [];
+        const avgDistance = location.avg_distance_km || 0;
+        const priority = location.priority || 'HIGH';
 
         marker.bindPopup(`
-          <div style="font-family: Inter, sans-serif; min-width: 220px;">
-            <strong style="font-size: 15px; color: #9333ea;">✨ Recommended New School</strong><br>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-              <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px; font-size: 13px;">
-                <strong>🏫 Type:</strong> <span>${schoolType}</span>
-                <strong>👥 Gender:</strong> <span>${gender}</span>
-                <strong>⏱️ Max Travel:</strong> <span>${maxTravel} min</span>
-                <strong>🧮 Method:</strong> <span>${methodology}</span>
-                <strong>📍 Location:</strong> <span>${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}</span>
-              </div>
-              <div style="margin-top: 8px; padding: 8px; background: #f3e8ff; border-radius: 4px; font-size: 12px;">
-                <strong>💡 Impact:</strong> Reduces overcrowding in nearby schools and improves accessibility
+          <div style="font-family: Inter, sans-serif; min-width: 280px;">
+            <div style="background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%); color: white; padding: 12px; margin: -12px -12px 12px -12px; border-radius: 4px 4px 0 0;">
+              <strong style="font-size: 16px;">📍 Optimal Location ${location.location_id || ''}</strong><br>
+              <span style="font-size: 12px; opacity: 0.9;">${location.recommended_district || 'New School Site'}</span>
+            </div>
+            
+            <div style="margin-bottom: 12px;">
+              <strong style="color: #6b21a8;">School Details:</strong><br>
+              <span style="font-size: 13px;">
+                ${location.school_type || 'Elementary'} · ${location.gender || 'Boys'}<br>
+                Priority: <strong style="color: ${priority === 'HIGH' ? '#dc2626' : '#f97316'};">${priority}</strong>
+              </span>
+            </div>
+
+            <div style="background: #f3f4f6; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+              <strong style="color: #1f2937; font-size: 14px;">📊 Quantitative Impact:</strong><br>
+              <div style="margin-top: 6px; font-size: 13px; line-height: 1.6;">
+                <strong>• Students Served:</strong> ${studentsServed.toLocaleString()} students<br>
+                <strong>• Recommended Capacity:</strong> ${recommendedCapacity.toLocaleString()} seats<br>
+                <strong>• Expected Utilization:</strong> ~85%<br>
+                <strong>• Reduces Overcrowding:</strong> ~${Math.round(studentsServed * 0.3).toLocaleString()} students<br>
+                <strong>• Districts Covered:</strong> ${districtsServed.length} districts<br>
+                <strong>• Avg Distance:</strong> ${avgDistance.toFixed(1)} km
               </div>
             </div>
+
+            ${districtsServed.length > 0 ? `
+              <div style="margin-bottom: 8px;">
+                <strong style="color: #1f2937; font-size: 13px;">Serving Districts:</strong><br>
+                <span style="font-size: 12px; color: #6b7280;">${districtsServed.join(', ')}</span>
+              </div>
+            ` : ''}
+
+            ${location.rationale ? `
+              <div style="padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #4b5563;">
+                <em>${location.rationale}</em>
+              </div>
+            ` : ''}
           </div>
         `);
 
         marker.addTo(optimalLayerRef.current);
-        addedOptimal++;
       });
-
-      console.log(`Added ${addedOptimal} optimal location markers`);
     }
 
-  }, [allSchools, optimalLocations, travelTimeData, loading, showSchools, showOptimal, showHeatmap, filters]);
+    // ===== FIX #3: SCHOOLS - Add what-if capability =====
+    if (showSchools) {
+      const filteredSchools = getFilteredSchools();
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  };
+      filteredSchools.forEach((school) => {
+        const coords = extractCoordinates(school);
+        if (!coords) return;
 
-  return (
-    <div className="space-y-6">
-      {/* Controls */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Layer toggles */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setShowSchools(!showSchools)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                showSchools
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              {showSchools ? <Eye size={16} /> : <EyeOff size={16} />}
-              Schools ({allSchools.length})
-            </button>
-            <button
-              onClick={() => setShowOptimal(!showOptimal)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                showOptimal
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              {showOptimal ? <Eye size={16} /> : <EyeOff size={16} />}
-              Optimal Locations ({optimalLocations.length})
-            </button>
-            <button
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                showHeatmap
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              {showHeatmap ? <Eye size={16} /> : <EyeOff size={16} />}
-              Travel Time Heatmap
-            </button>
+        const originalCapacity = parseInt(school.capacity || school.design_capacity || 0);
+        const adjustedCapacity = parseInt(capacityChanges[school.id] || originalCapacity);
+        const enrollment = parseInt(school.enrollment || school.current_enrollment || 0);
+        const utilization = adjustedCapacity > 0 ? ((enrollment / adjustedCapacity) * 100).toFixed(1) : 0;
+        const deficit = Math.max(0, enrollment - adjustedCapacity);
+
+        const marker = L.circleMarker([coords.lat, coords.lng], {
+          radius: 8,
+          fillColor: getMarkerColor(school),
+          color: '#fff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.8
+        });
+
+        // Create popup content with what-if capability
+        const popupContent = document.createElement('div');
+        popupContent.style.fontFamily = 'Inter, sans-serif';
+        popupContent.style.minWidth = '260px';
+        
+        popupContent.innerHTML = `
+          <div style="background: linear-gradient(135deg, ${getMarkerColor(school)} 0%, ${getMarkerColor(school)}dd 100%); color: white; padding: 10px; margin: -12px -12px 12px -12px; border-radius: 4px 4px 0 0;">
+            <strong style="font-size: 14px;">${school.school_name || school.name || 'School'}</strong><br>
+            <span style="font-size: 11px; opacity: 0.9;">${school.district || school.district_name || ''}</span>
+          </div>
+          
+          <div style="margin-bottom: 10px; font-size: 12px;">
+            <strong>${school.school_type || 'Elementary'}</strong> · ${school.gender || 'Boys'}
           </div>
 
-          {/* Filter toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-          >
-            <Filter size={16} />
-            Filters
-          </button>
+          ${whatIfMode ? `
+            <div style="background: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px; margin-bottom: 10px; border-radius: 4px;">
+              <strong style="color: #92400e; font-size: 12px;">🔧 What-If Mode Active</strong>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Adjust Capacity:</label>
+              <input 
+                type="number" 
+                id="capacity-input-${school.id}"
+                value="${adjustedCapacity}"
+                min="0"
+                style="width: 100%; padding: 6px; border: 2px solid #e5e7eb; border-radius: 4px; font-size: 13px;"
+              />
+              <button 
+                id="update-btn-${school.id}"
+                style="margin-top: 6px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; width: 100%;"
+              >
+                Update Capacity
+              </button>
+              ${adjustedCapacity !== originalCapacity ? `
+                <button 
+                  id="reset-btn-${school.id}"
+                  style="margin-top: 4px; padding: 4px 8px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; width: 100%;"
+                >
+                  Reset to Original (${originalCapacity})
+                </button>
+              ` : ''}
+            </div>
+          ` : ''}
+
+          <div style="background: #f9fafb; padding: 8px; border-radius: 6px; font-size: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <strong style="color: #6b7280;">Capacity:</strong><br>
+                <span style="color: #1f2937; font-size: 14px; font-weight: 600;">${adjustedCapacity.toLocaleString()}</span>
+                ${adjustedCapacity !== originalCapacity ? `<br><span style="color: #3b82f6; font-size: 10px;">(was ${originalCapacity})</span>` : ''}
+              </div>
+              <div>
+                <strong style="color: #6b7280;">Enrollment:</strong><br>
+                <span style="color: #1f2937; font-size: 14px; font-weight: 600;">${enrollment.toLocaleString()}</span>
+              </div>
+              <div>
+                <strong style="color: #6b7280;">Utilization:</strong><br>
+                <span style="color: ${utilization >= 100 ? '#dc2626' : utilization >= 85 ? '#f97316' : '#22c55e'}; font-size: 14px; font-weight: 600;">${utilization}%</span>
+              </div>
+              <div>
+                <strong style="color: #6b7280;">Deficit:</strong><br>
+                <span style="color: ${deficit > 0 ? '#dc2626' : '#22c55e'}; font-size: 14px; font-weight: 600;">${deficit > 0 ? deficit.toLocaleString() : '—'}</span>
+              </div>
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+
+        // Add event listeners for what-if mode buttons
+        if (whatIfMode) {
+          marker.on('popupopen', () => {
+            const updateBtn = document.getElementById(`update-btn-${school.id}`);
+            const resetBtn = document.getElementById(`reset-btn-${school.id}`);
+            const input = document.getElementById(`capacity-input-${school.id}`);
+
+            if (updateBtn) {
+              updateBtn.addEventListener('click', () => {
+                const newCapacity = parseInt(input.value);
+                if (!isNaN(newCapacity) && newCapacity >= 0) {
+                  setCapacityChanges(prev => ({
+                    ...prev,
+                    [school.id]: newCapacity
+                  }));
+                }
+              });
+            }
+
+            if (resetBtn) {
+              resetBtn.addEventListener('click', () => {
+                setCapacityChanges(prev => {
+                  const updated = { ...prev };
+                  delete updated[school.id];
+                  return updated;
+                });
+              });
+            }
+          });
+        }
+
+        marker.addTo(schoolsLayerRef.current);
+      });
+    }
+  }, [allSchools, optimalLocations, travelTimeData, showSchools, showOptimal, showHeatmap, filters, whatIfMode, capacityChanges, loading]);
+
+// END OF PART 2
+// Continue with Part 3 for UI components and rendering
+// ============================================
+// MapTab.jsx - PART 3 of 3
+// This is the continuation of Part 2
+// Final part with UI rendering
+// ============================================
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading map data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-screen">
+      {/* Map Container */}
+      <div ref={mapRef} className="absolute inset-0 z-0"></div>
+
+      {/* Control Panel - Top Right */}
+      <div className="absolute top-4 right-4 z-10 space-y-2">
+        {/* Layer Toggles */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-3">
+          <h3 className="font-semibold text-sm text-gray-900 dark:text-white mb-2">Map Layers</h3>
+          
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showSchools}
+              onChange={(e) => setShowSchools(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded"
+            />
+            <Eye size={16} className={showSchools ? 'text-blue-600' : 'text-gray-400'} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Schools</span>
+          </label>
+
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showOptimal}
+              onChange={(e) => setShowOptimal(e.target.checked)}
+              className="w-4 h-4 text-purple-600 rounded"
+            />
+            <Eye size={16} className={showOptimal ? 'text-purple-600' : 'text-gray-400'} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Optimal Locations</span>
+          </label>
+
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showHeatmap}
+              onChange={(e) => setShowHeatmap(e.target.checked)}
+              className="w-4 h-4 text-green-600 rounded"
+            />
+            <Eye size={16} className={showHeatmap ? 'text-green-600' : 'text-gray-400'} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">District Heatmap</span>
+          </label>
         </div>
 
-        {/* Filter panel */}
+        {/* What-If Analysis Toggle */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={whatIfMode}
+              onChange={(e) => {
+                setWhatIfMode(e.target.checked);
+                if (!e.target.checked) {
+                  setCapacityChanges({});
+                }
+              }}
+              className="w-4 h-4 text-orange-600 rounded"
+            />
+            <Edit3 size={16} className={whatIfMode ? 'text-orange-600' : 'text-gray-400'} />
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">What-If Mode</span>
+          </label>
+          {whatIfMode && (
+            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              <p>Click schools to adjust capacity and see district-level impact</p>
+              {Object.keys(capacityChanges).length > 0 && (
+                <button
+                  onClick={() => setCapacityChanges({})}
+                  className="mt-2 flex items-center space-x-1 text-blue-600 hover:text-blue-700"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset All Changes</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Filters Toggle */}
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+        >
+          <div className="flex items-center space-x-2">
+            <Filter size={16} className="text-gray-600 dark:text-gray-400" />
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Filters</span>
+          </div>
+          <span className="text-xs text-gray-500">{showFilters ? '▼' : '▶'}</span>
+        </button>
+
+        {/* Filter Panel */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Utilization range */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-4 max-w-xs">
+            {/* Utilization Range */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Utilization Range: {filters.utilizationMin}% - {filters.utilizationMax}%
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-2">
+                Utilization: {filters.utilizationMin}% - {filters.utilizationMax}%
               </label>
-              <div className="flex gap-2">
+              <div className="flex space-x-2">
                 <input
-                  type="number"
+                  type="range"
                   min="0"
                   max="200"
                   value={filters.utilizationMin}
-                  onChange={(e) => handleFilterChange('utilizationMin', parseInt(e.target.value))}
-                  className="w-20 px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 text-sm"
+                  onChange={(e) => setFilters({...filters, utilizationMin: parseInt(e.target.value)})}
+                  className="w-full"
                 />
                 <input
-                  type="number"
+                  type="range"
                   min="0"
                   max="200"
                   value={filters.utilizationMax}
-                  onChange={(e) => handleFilterChange('utilizationMax', parseInt(e.target.value))}
-                  className="w-20 px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 text-sm"
+                  onChange={(e) => setFilters({...filters, utilizationMax: parseInt(e.target.value)})}
+                  className="w-full"
                 />
               </div>
             </div>
 
-            {/* School type */}
+            {/* School Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
                 School Type
               </label>
               <select
                 value={filters.schoolType}
-                onChange={(e) => handleFilterChange('schoolType', e.target.value)}
-                className="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 text-sm"
+                onChange={(e) => setFilters({...filters, schoolType: e.target.value})}
+                className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 <option value="all">All Types</option>
                 <option value="Elementary">Elementary</option>
@@ -446,13 +734,13 @@ const MapTab = () => {
 
             {/* Gender */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
                 Gender
               </label>
               <select
                 value={filters.gender}
-                onChange={(e) => handleFilterChange('gender', e.target.value)}
-                className="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 text-sm"
+                onChange={(e) => setFilters({...filters, gender: e.target.value})}
+                className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 <option value="all">All</option>
                 <option value="Boys">Boys</option>
@@ -460,146 +748,193 @@ const MapTab = () => {
               </select>
             </div>
 
-            {/* Category toggles */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Show Categories
+            {/* Category Toggles */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
+                Categories
               </label>
-              <div className="space-y-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filters.showCritical}
-                    onChange={(e) => handleFilterChange('showCritical', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-red-600">Critical (&gt;120%)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filters.showOverCapacity}
-                    onChange={(e) => handleFilterChange('showOverCapacity', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-orange-600">Over Capacity (100-120%)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filters.showNearCapacity}
-                    onChange={(e) => handleFilterChange('showNearCapacity', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-yellow-600">Near Capacity (85-100%)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filters.showAcceptable}
-                    onChange={(e) => handleFilterChange('showAcceptable', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-green-600">Acceptable (&lt;85%)</span>
-                </label>
+              <label className="flex items-center space-x-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={filters.showCritical}
+                  onChange={(e) => setFilters({...filters, showCritical: e.target.checked})}
+                  className="w-3 h-3"
+                />
+                <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                <span className="text-gray-700 dark:text-gray-300">Critical (≥120%)</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={filters.showOverCapacity}
+                  onChange={(e) => setFilters({...filters, showOverCapacity: e.target.checked})}
+                  className="w-3 h-3"
+                />
+                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                <span className="text-gray-700 dark:text-gray-300">Over (100-119%)</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={filters.showNearCapacity}
+                  onChange={(e) => setFilters({...filters, showNearCapacity: e.target.checked})}
+                  className="w-3 h-3"
+                />
+                <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                <span className="text-gray-700 dark:text-gray-300">Near (85-99%)</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={filters.showAcceptable}
+                  onChange={(e) => setFilters({...filters, showAcceptable: e.target.checked})}
+                  className="w-3 h-3"
+                />
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-gray-700 dark:text-gray-300">Acceptable (&lt;85%)</span>
+              </label>
+            </div>
+
+            {/* Reset Filters */}
+            <button
+              onClick={() => setFilters({
+                utilizationMin: 0,
+                utilizationMax: 200,
+                schoolType: 'all',
+                gender: 'all',
+                showCritical: true,
+                showOverCapacity: true,
+                showNearCapacity: true,
+                showAcceptable: true,
+              })}
+              className="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 py-2 px-3 rounded text-sm transition"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Legend - Bottom Left */}
+      <div className="absolute bottom-4 left-4 z-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 max-w-xs">
+        <h3 className="font-semibold text-sm text-gray-900 dark:text-white mb-3">Legend</h3>
+        
+        {/* Schools Legend */}
+        {showSchools && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Schools (by utilization)</p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                <span className="text-gray-700 dark:text-gray-300">Critical (≥120%)</span>
               </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                <span className="text-gray-700 dark:text-gray-300">Over Capacity (100-119%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                <span className="text-gray-700 dark:text-gray-300">Near Capacity (85-99%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-gray-700 dark:text-gray-300">Acceptable (&lt;85%)</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Optimal Locations Legend */}
+        {showOptimal && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Optimal Locations</p>
+            <div className="flex items-center gap-2 text-xs">
+              <div className="w-3 h-3 bg-purple-600 transform rotate-45"></div>
+              <span className="text-gray-700 dark:text-gray-300">Recommended Site</span>
+            </div>
+          </div>
+        )}
+
+        {/* District Heatmap Legend */}
+        {showHeatmap && (
+          <div>
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">District Travel Time</p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-green-500 opacity-30"></div>
+                <span className="text-gray-700 dark:text-gray-300">&lt;20 min avg</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-orange-500 opacity-30"></div>
+                <span className="text-gray-700 dark:text-gray-300">20-30 min avg</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 rounded-full bg-red-500 opacity-30"></div>
+                <span className="text-gray-700 dark:text-gray-300">&gt;30 min avg</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* What-If Impact Summary */}
+        {whatIfMode && Object.keys(capacityChanges).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Info size={14} className="text-orange-600" />
+              <p className="text-xs font-semibold text-gray-900 dark:text-white">Impact Summary</p>
+            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+              <p><strong>{Object.keys(capacityChanges).length}</strong> schools modified</p>
+              <p className="text-orange-600">Click districts to see impact</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Map Container */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Riyadh Schools - Comprehensive View
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Interactive map showing all schools, recommended locations, and travel time analysis. Click markers for details.
-          </p>
+      {/* Stats Summary - Top Left */}
+      <div className="absolute top-4 left-4 z-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <p className="text-2xl font-bold text-blue-600">{allSchools.length}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Schools</p>
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-purple-600">{optimalLocations.length}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Optimal Sites</p>
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-green-600">{Object.keys(districtImpact).length || travelTimeData.length}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Districts</p>
+          </div>
         </div>
+      </div>
 
-        <div style={{ position: 'relative' }}>
-          <div 
-            ref={mapRef} 
-            style={{ height: '700px', width: '100%' }}
-            className="rounded-lg border border-gray-200 dark:border-gray-700"
+      {/* AI Insights Panels - Bottom */}
+      <div className="absolute bottom-4 right-4 z-10 max-w-md space-y-4">
+        {optimalApiData?.ai_insights && showOptimal && (
+          <AIInsightsPanel 
+            insights={optimalApiData.ai_insights} 
+            title="AI Location Analysis" 
           />
-          {loading && (
-            <div style={{ 
-              position: 'absolute', 
-              top: 0, 
-              left: 0, 
-              right: 0, 
-              bottom: 0, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              borderRadius: '0.5rem',
-              zIndex: 1000 
-            }}>
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600 dark:text-gray-400">Loading map data...</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">School Status</p>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-red-600"></div>
-                    <span className="text-gray-700 dark:text-gray-300">Critical (&gt;120%)</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                    <span className="text-gray-700 dark:text-gray-300">Over Capacity (100-120%)</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-                    <span className="text-gray-700 dark:text-gray-300">Near Capacity (85-100%)</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                    <span className="text-gray-700 dark:text-gray-300">Acceptable (&lt;85%)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Optimal Locations</p>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-4 h-4 bg-purple-600 transform rotate-45"></div>
-                  <span className="text-gray-700 dark:text-gray-300">Recommended New School</span>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Travel Time (Districts)</p>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-green-500 opacity-30"></div>
-                    <span className="text-gray-700 dark:text-gray-300">&lt; 20 min</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-orange-500 opacity-30"></div>
-                    <span className="text-gray-700 dark:text-gray-300">20-30 min</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 rounded-full bg-red-500 opacity-30"></div>
-                    <span className="text-gray-700 dark:text-gray-300">&gt; 30 min</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+        )}
+        {travelApiData?.ai_insights && showHeatmap && (
+          <AIInsightsPanel 
+            insights={travelApiData.ai_insights} 
+            title="AI Travel Time Analysis" 
+          />
+        )}
       </div>
     </div>
   );
 };
 
 export default MapTab;
+
+// ============================================
+// END OF PART 3
+// 
+// To use this file:
+// 1. Concatenate Part1 + Part2 + Part3
+// 2. Save as MapTab.jsx
+// 3. Deploy to your React application
+// ============================================
