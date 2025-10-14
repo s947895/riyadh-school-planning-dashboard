@@ -76,7 +76,7 @@ class ApiService {
         `${API_BASE_URL}/budget-optimizer`,
         { 
           method: 'POST',
-          body: JSON.stringify({ budget_amount: budgetAmount })
+          body: JSON.stringify({ budget: budgetAmount })
         }
       );
       return data;
