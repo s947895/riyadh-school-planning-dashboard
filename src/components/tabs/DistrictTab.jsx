@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell } from 'recharts';
-import { TrendingUp, AlertCircle, Users, Clock, MapPin } from 'lucide-react';
+import { TrendingUp, AlertCircle, Users, Clock, MapPin, School, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import AIInsightsPanel from '../shared/AIInsightsPanel';
 import api from '../../services/api';
@@ -35,26 +35,23 @@ const DistrictAnalysisTab = () => {
 
   if (!districtData || !districtData.district_priorities) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <p className="text-gray-500 dark:text-gray-400">Unable to load district data.</p>
       </div>
     );
   }
 
-  // Extract districts from the actual API response structure
   const districts = districtData.district_priorities || [];
 
   // Apply filters and sorting
   let filteredDistricts = [...districts];
   
-  // Filter by tier
   if (filterTier !== 'all') {
     filteredDistricts = filteredDistricts.filter(d => 
       d.priority_tier?.toLowerCase() === filterTier.toLowerCase()
     );
   }
 
-  // Sort districts
   filteredDistricts.sort((a, b) => {
     switch (sortBy) {
       case 'priority_score':
@@ -70,18 +67,15 @@ const DistrictAnalysisTab = () => {
     }
   });
 
-  // Prepare chart data
   const chartData = filteredDistricts.map(d => ({
     name: d.district,
     score: d.priority_score || 0,
     tier: d.priority_tier
   }));
 
-  // Priority stats
   const priorities = districts;
   const highPriorityCount = priorities.filter(d => d.priority_tier === 'HIGH').length;
 
-  // Tier badge colors - consistent with other tabs
   const getTierColor = (tier) => {
     switch (tier?.toUpperCase()) {
       case 'CRITICAL':
@@ -96,7 +90,6 @@ const DistrictAnalysisTab = () => {
     }
   };
 
-  // Get bar color based on tier
   const getBarColor = (tier) => {
     switch (tier?.toUpperCase()) {
       case 'CRITICAL':
@@ -111,7 +104,6 @@ const DistrictAnalysisTab = () => {
     }
   };
 
-  // Toggle district selection for comparison
   const toggleDistrictSelection = (district) => {
     setSelectedDistricts(prev => {
       const isSelected = prev.some(d => d.district === district.district);
@@ -124,7 +116,6 @@ const DistrictAnalysisTab = () => {
     });
   };
 
-  // Prepare radar chart data for comparison
   const getComparisonData = () => {
     if (selectedDistricts.length === 0) return [];
     
@@ -146,93 +137,66 @@ const DistrictAnalysisTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Filters - STYLED LIKE OTHER TABS */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          District Analysis & Priorities
-        </h2>
-        
-        <div className="flex flex-wrap gap-4">
-          {/* Tier Filter */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
-              Filter by Tier
-            </label>
-            <select
-              value={filterTier}
-              onChange={(e) => setFilterTier(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="all">All Tiers</option>
-              <option value="high">High Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="low">Low Priority</option>
-            </select>
-          </div>
+      {/* Filters Bar */}
+      <div className="flex flex-wrap gap-4 items-center">
+        <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+            Filter by Tier
+          </label>
+          <select
+            value={filterTier}
+            onChange={(e) => setFilterTier(e.target.value)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          >
+            <option value="all">All Tiers</option>
+            <option value="high">High Priority</option>
+            <option value="medium">Medium Priority</option>
+            <option value="low">Low Priority</option>
+          </select>
+        </div>
 
-          {/* Sort By */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
-              Sort By
-            </label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="priority_score">Priority Score</option>
-              <option value="district">District Name</option>
-              <option value="deficit">Current Deficit</option>
-              <option value="forecast">2030 Forecast Gap</option>
-            </select>
-          </div>
+        <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+            Sort By
+          </label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          >
+            <option value="priority_score">Priority Score</option>
+            <option value="district">District Name</option>
+            <option value="deficit">Current Deficit</option>
+            <option value="forecast">2030 Forecast Gap</option>
+          </select>
+        </div>
 
-          {/* Stats Summary */}
-          <div className="ml-auto flex gap-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total Districts</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{priorities.length}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">High Priority</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                {highPriorityCount}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Selected for Comparison</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {selectedDistricts.length}/3
-              </p>
-            </div>
-          </div>
+        <div className="ml-auto text-right">
+          <p className="text-sm text-gray-500 dark:text-gray-400">Selected for Comparison</p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {selectedDistricts.length}/3
+          </p>
         </div>
       </div>
 
-      {/* Priority Scores Chart - STYLED LIKE OTHER TABS */}
+      {/* Priority Scores Chart */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
           District Priority Scores
         </h3>
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={chartData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis type="number" domain={[0, 100]} stroke="#9ca3af" />
-            <YAxis dataKey="name" type="category" width={120} stroke="#9ca3af" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis type="number" domain={[0, 100]} stroke="#6b7280" />
+            <YAxis dataKey="name" type="category" width={120} stroke="#6b7280" />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
-                color: '#f3f4f6'
+                backgroundColor: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px'
               }}
             />
-            <Legend />
-            <Bar 
-              dataKey="score" 
-              name="Priority Score"
-              radius={[0, 8, 8, 0]}
-            >
+            <Bar dataKey="score" name="Priority Score" radius={[0, 4, 4, 0]}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.tier)} />
               ))}
@@ -241,38 +205,36 @@ const DistrictAnalysisTab = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Scoring Methodology - NOW WITH EMERALD GRADIENT LIKE OTHER TABS */}
-      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg shadow-lg p-6 border border-emerald-200 dark:border-emerald-800">
+      {/* Scoring Methodology */}
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg shadow p-6 border border-emerald-200 dark:border-emerald-800">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
           Scoring Methodology
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Weighting Factors */}
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
               Weighting Factors
             </h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-gray-700 dark:text-gray-300">Current Overcapacity</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Current Overcapacity</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">40%</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-700 dark:text-gray-300">Forecast Growth (2030)</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Forecast Growth (2030)</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">30%</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-700 dark:text-gray-300">Travel Accessibility</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Travel Accessibility</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">20%</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-700 dark:text-gray-300">Population Impact</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Population Impact</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">10%</span>
               </div>
             </div>
           </div>
 
-          {/* Priority Tiers */}
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
               Priority Tiers
@@ -301,7 +263,7 @@ const DistrictAnalysisTab = () => {
         </div>
       </div>
 
-      {/* District Comparison Tool - STYLED LIKE OTHER TABS */}
+      {/* District Comparison Tool */}
       {selectedDistricts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
@@ -309,16 +271,15 @@ const DistrictAnalysisTab = () => {
           </h3>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Radar Chart */}
             <div>
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
                 Component Scores
               </h4>
               <ResponsiveContainer width="100%" height={300}>
                 <RadarChart data={getComparisonData()}>
-                  <PolarGrid stroke="#374151" />
-                  <PolarAngleAxis dataKey="metric" stroke="#9ca3af" />
-                  <PolarRadiusAxis domain={[0, 100]} stroke="#9ca3af" />
+                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarAngleAxis dataKey="metric" stroke="#6b7280" />
+                  <PolarRadiusAxis domain={[0, 100]} stroke="#6b7280" />
                   {selectedDistricts.map((district, index) => (
                     <Radar
                       key={district.district}
@@ -330,21 +291,13 @@ const DistrictAnalysisTab = () => {
                     />
                   ))}
                   <Legend />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1f2937',
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#f3f4f6'
-                    }}
-                  />
+                  <Tooltip />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Comparison Table */}
             <div className="overflow-x-auto">
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
                 Key Metrics Comparison
               </h4>
               <table className="min-w-full text-sm">
@@ -358,42 +311,26 @@ const DistrictAnalysisTab = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   <tr>
-                    <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">Priority Score</td>
+                    <td className="px-4 py-2 font-medium">Priority Score</td>
                     {selectedDistricts.map(d => (
-                      <td key={d.district} className="px-4 py-2 text-center font-bold text-gray-900 dark:text-white">
+                      <td key={d.district} className="px-4 py-2 text-center font-bold">
                         {d.priority_score.toFixed(1)}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">Current Deficit</td>
+                    <td className="px-4 py-2">Current Deficit</td>
                     {selectedDistricts.map(d => (
-                      <td key={d.district} className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">
+                      <td key={d.district} className="px-4 py-2 text-center">
                         {(d.metrics?.total_current_deficit || 0).toLocaleString()}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">2030 Forecast Gap</td>
+                    <td className="px-4 py-2">2030 Forecast Gap</td>
                     {selectedDistricts.map(d => (
-                      <td key={d.district} className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">
+                      <td key={d.district} className="px-4 py-2 text-center">
                         {(d.metrics?.forecasted_gap_2030 || 0).toLocaleString()}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">Schools Count</td>
-                    {selectedDistricts.map(d => (
-                      <td key={d.district} className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">
-                        {d.metrics?.school_count || 0}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">Avg Travel Time</td>
-                    {selectedDistricts.map(d => (
-                      <td key={d.district} className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">
-                        {(d.metrics?.avg_travel_time || 0).toFixed(1)} min
                       </td>
                     ))}
                   </tr>
@@ -404,137 +341,135 @@ const DistrictAnalysisTab = () => {
         </div>
       )}
 
-      {/* District Cards - STYLED LIKE OTHER TABS */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          District Details
+      {/* Top Priority Districts - MATCHING OVERVIEW TAB STYLE */}
+      <div>
+        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+          Top {Math.min(6, filteredDistricts.length)} Priority Districts
         </h3>
-        <div className="space-y-4">
-          {filteredDistricts.map((district, index) => {
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {filteredDistricts.slice(0, 6).map((district, index) => {
             const isSelected = selectedDistricts.some(d => d.district === district.district);
             
             return (
               <div
                 key={district.district}
                 onClick={() => toggleDistrictSelection(district)}
-                className={`cursor-pointer transition-all rounded-lg p-6 border-2 ${
-                  isSelected 
-                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600' 
-                    : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'
+                className={`bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer p-6 ${
+                  isSelected ? 'ring-2 ring-blue-500' : ''
                 }`}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                        #{index + 1}. {district.district}
-                      </h4>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getTierColor(district.priority_tier)}`}>
-                        {district.priority_tier}
-                      </span>
-                      {isSelected && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                          Selected for Comparison
-                        </span>
-                      )}
+                {/* Header */}
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {district.tier_description}
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                          #{index + 1} {district.district}
+                        </h4>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Population: {(district.metrics?.population || 0).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
-                  
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {district.priority_score.toFixed(1)}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Priority Score</p>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getTierColor(district.priority_tier)}`}>
+                    {district.priority_tier}
+                  </span>
+                </div>
+
+                {/* Priority Score - Large Blue Circle */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Priority Score</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                        <span className="text-xl font-bold text-white">
+                          {Math.round(district.priority_score)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metrics Grid - 2x2 */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <School className="w-5 h-5 text-gray-400 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Overcapacity Schools</p>
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
+                        {district.metrics?.school_count || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Current Deficit</p>
+                      <p className="text-xl font-bold text-red-600 dark:text-red-400">
+                        {(district.metrics?.total_current_deficit || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <TrendingUp className="w-5 h-5 text-orange-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">2030 Forecast Gap</p>
+                      <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                        {(district.metrics?.forecasted_gap_2030 || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-purple-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Avg Travel Time</p>
+                      <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                        {(district.metrics?.avg_travel_time || 0).toFixed(1)} min
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Component Scores */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div className="bg-white dark:bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <AlertCircle className="w-4 h-4 text-red-500" />
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {Math.round(district.component_scores?.current_overcapacity || 0)}
-                      </span>
+                <div className="mb-6">
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                    Component Scores
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Current Overcapacity:</span>
+                      <span className="font-semibold">{Math.round(district.component_scores?.current_overcapacity || 0)}</span>
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Overcapacity Score</p>
-                  </div>
-
-                  <div className="bg-white dark:bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <TrendingUp className="w-4 h-4 text-blue-500" />
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {Math.round(district.component_scores?.forecast_growth || 0)}
-                      </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Forecast Growth:</span>
+                      <span className="font-semibold">{Math.round(district.component_scores?.forecast_growth || 0)}</span>
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Growth Score</p>
-                  </div>
-
-                  <div className="bg-white dark:bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <Clock className="w-4 h-4 text-yellow-500" />
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {Math.round(district.component_scores?.travel_accessibility || 0)}
-                      </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Travel Accessibility:</span>
+                      <span className="font-semibold">{Math.round(district.component_scores?.travel_accessibility || 0)}</span>
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Travel Score</p>
-                  </div>
-
-                  <div className="bg-white dark:bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <Users className="w-4 h-4 text-green-500" />
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {Math.round(district.component_scores?.population_impact || 0)}
-                      </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Population Impact:</span>
+                      <span className="font-semibold">{Math.round(district.component_scores?.population_impact || 0)}</span>
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Population Score</p>
-                  </div>
-                </div>
-
-                {/* Key Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 p-4 bg-white dark:bg-gray-700 rounded-lg">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Schools</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {district.metrics?.school_count || 0}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Current Deficit</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {(district.metrics?.total_current_deficit || 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">2030 Gap</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {(district.metrics?.forecasted_gap_2030 || 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Avg Travel</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {(district.metrics?.avg_travel_time || 0).toFixed(1)} min
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Population</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {(district.metrics?.population || 0).toLocaleString()}
-                    </p>
                   </div>
                 </div>
 
                 {/* Investment Rationale */}
-                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-                  <h5 className="font-semibold text-gray-900 dark:text-white mb-2">
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border-l-4 border-green-500">
+                  <h5 className="font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
                     Investment Rationale
                   </h5>
                   <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                    {district.investment_rationale?.map((rationale, idx) => (
+                    {district.investment_rationale?.slice(0, 3).map((rationale, idx) => (
                       <li key={idx}>• {rationale}</li>
                     ))}
                   </ul>
@@ -545,7 +480,7 @@ const DistrictAnalysisTab = () => {
         </div>
       </div>
 
-      {/* AI Insights - PROPERLY STYLED WITH EMERALD GRADIENT LIKE OTHER TABS */}
+      {/* AI Insights */}
       {districtData?.ai_insights && (
         <AIInsightsPanel 
           insights={districtData.ai_insights} 
