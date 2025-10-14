@@ -69,6 +69,31 @@ class ApiService {
     }
   }
 
+
+  
+  // 4. Budget Optimization
+  async getBudgetOptimizer(budget = 1000000000, threshold = 400) {
+    try {
+      const data = await this.fetchWithRetry(
+        `${API_BASE_URL}/budget-optimizer`,
+        { 
+          method: 'POST',
+          body: JSON.stringify({ 
+            budget: budget,
+            new_school_threshold: threshold 
+          })
+        }
+      );
+      return data;
+    } catch (error) {
+      console.error('Error fetching budget optimizer:', error);
+      return null;
+    }
+  }
+  
+  
+  
+  /*
   // 4. Budget Optimization
   async getBudgetOptimization(budgetAmount) {
     try {
@@ -85,7 +110,7 @@ class ApiService {
       return null;
     }
   }
-
+*/
   // 5. Forecast Scenarios
   async getForecastScenarios(params = {}) {
     try {
