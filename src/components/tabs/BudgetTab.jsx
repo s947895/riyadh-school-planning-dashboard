@@ -11,22 +11,23 @@ const BudgetTab = () => {
   const [budget, setBudget] = useState(1000000000); // 1 Billion SAR default
 
   useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        console.log('Calling API with budget:', budget);
+        // Use the correct function name from api.js: getBudgetOptimization
+        const data = await api.getBudgetOptimization(budget);
+        console.log('Budget API Response:', data);
+        setBudgetData(data);
+      } catch (error) {
+        console.error('Error loading budget data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
     loadData();
   }, [budget]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Use the correct function name from api.js: getBudgetOptimization
-      const data = await api.getBudgetOptimization(budget);
-      console.log('Budget API Response:', data);
-      setBudgetData(data);
-    } catch (error) {
-      console.error('Error loading budget data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return <LoadingSpinner message="Optimizing budget allocation..." />;
