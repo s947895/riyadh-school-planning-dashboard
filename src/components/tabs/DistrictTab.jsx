@@ -181,22 +181,57 @@ const DistrictAnalysisTab = () => {
 
       {/* Priority Scores Chart */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
           District Priority Scores
         </h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis type="number" domain={[0, 100]} stroke="#6b7280" />
-            <YAxis dataKey="name" type="category" width={120} stroke="#6b7280" />
+        <ResponsiveContainer width="100%" height={450}>
+          <BarChart 
+            data={chartData} 
+            layout="vertical"
+            margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              stroke="#e5e7eb" 
+              horizontal={true} 
+              vertical={false}
+            />
+            <XAxis 
+              type="number" 
+              domain={[0, 100]} 
+              stroke="#9ca3af"
+              style={{ fontSize: '12px' }}
+              tick={{ fill: '#6b7280' }}
+            />
+            <YAxis 
+              dataKey="name" 
+              type="category" 
+              width={150} 
+              stroke="#9ca3af"
+              style={{ fontSize: '13px' }}
+              tick={{ fill: '#374151' }}
+            />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#ffffff',
+                backgroundColor: 'rgba(255, 255, 255, 0.98)',
                 border: '1px solid #e5e7eb',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                padding: '12px'
               }}
+              labelStyle={{
+                color: '#111827',
+                fontWeight: 600,
+                marginBottom: '4px'
+              }}
+              cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
             />
-            <Bar dataKey="score" name="Priority Score" radius={[0, 4, 4, 0]}>
+            <Bar 
+              dataKey="score" 
+              name="Priority Score" 
+              radius={[0, 8, 8, 0]}
+              maxBarSize={40}
+            >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.tier)} />
               ))}
