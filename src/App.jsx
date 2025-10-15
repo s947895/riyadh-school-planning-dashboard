@@ -6,6 +6,7 @@ import MapTab from './components/tabs/MapTab';
 import ForecastingTab from './components/tabs/ForecastingTab';
 import BudgetTab from './components/tabs/BudgetTab';
 import DistrictTab from './components/tabs/DistrictTab';
+import { LanguageProvider } from './contexts/LanguageContext';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
