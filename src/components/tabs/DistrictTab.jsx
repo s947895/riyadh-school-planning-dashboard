@@ -4,6 +4,7 @@ import { TrendingUp, AlertCircle, Users, Clock, MapPin, School, AlertTriangle } 
 import LoadingSpinner from '../shared/LoadingSpinner';
 import AIInsightsPanel from '../shared/AIInsightsPanel';
 import api from '../../services/api';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const DistrictAnalysisTab = () => {
   const [loading, setLoading] = useState(true);
@@ -11,7 +12,8 @@ const DistrictAnalysisTab = () => {
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [sortBy, setSortBy] = useState('priority_score');
   const [filterTier, setFilterTier] = useState('all');
-
+const { t, isRTL } = useLanguage();
+  
   useEffect(() => {
     loadData();
   }, []);
@@ -138,20 +140,20 @@ const DistrictAnalysisTab = () => {
   return (
     <div className="space-y-6">
       {/* Filters Bar */}
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className={`flex flex-wrap gap-4 items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div>
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
-            Filter by Tier
+            {t('districts.filter.tier')}
           </label>
           <select
             value={filterTier}
             onChange={(e) => setFilterTier(e.target.value)}
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           >
-            <option value="all">All Tiers</option>
-            <option value="high">High Priority</option>
-            <option value="medium">Medium Priority</option>
-            <option value="low">Low Priority</option>
+            <option value="all">{t('districts.filter.all')}</option>
+            <option value="high">{t('districts.filter.high')}</option>
+            <option value="medium">{t('districts.filter.medium')}</option>
+            <option value="low">{t('districts.filter.low')}</option>
           </select>
         </div>
 
@@ -182,7 +184,7 @@ const DistrictAnalysisTab = () => {
       {/* Priority Scores Chart */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-          District Priority Scores
+          {t('districts.chart.title')}
         </h3>
         <ResponsiveContainer width="100%" height={450}>
           <BarChart 
