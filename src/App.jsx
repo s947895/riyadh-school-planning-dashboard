@@ -30,19 +30,21 @@ function App() {
 
   return (
     <DarkModeProvider>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {renderTabContent()}
-        </main>
-        <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <p className="text-center text-gray-600 dark:text-gray-400 text-sm">
-              © 2025 Riyadh Ministry of Education - School Planning Dashboard
-            </p>
-          </div>
-        </footer>
-      </div>
+      <LanguageProvider>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {renderTabContent()}
+          </main>
+          <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+              <p className="text-center text-gray-600 dark:text-gray-400 text-sm">
+                © 2025 Riyadh Ministry of Education - School Planning Dashboard
+              </p>
+            </div>
+          </footer>
+        </div>
+      </LanguageProvider>
     </DarkModeProvider>
   );
 }
